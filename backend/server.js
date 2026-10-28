@@ -14,7 +14,7 @@ app.use('/api/islands', require('./routes/islands'));
 app.use('/api/contact', require('./routes/contact'));
 
 // Serve the frontend
-app.use(express.static(path.join(__dirname, '..', 'Frontend')));
+app.use(express.static(path.join(__dirname, '..', 'fontend')));
 
 const PORT = process.env.PORT || 5000;
 

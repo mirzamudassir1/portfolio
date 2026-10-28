@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 document.getElementById('hint').innerHTML =
-    'W / ↑ = sail &nbsp; S / ↓ = reverse &nbsp; A / ← and D / → = steer &nbsp; Sail close to an island!';
+    'W / ↑ = sail &nbsp; S / ↓ = reverse &nbsp; A / ← and D / → = steer &nbsp; Drag = look around';
 
 // ---------- Scene ----------
 const scene = new THREE.Scene();
@@ -12,6 +12,7 @@ const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 15
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.domElement.style.touchAction = 'none';
 document.body.appendChild(renderer.domElement);
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.65));
@@ -150,7 +151,7 @@ function hidePanel() {
     panel.style.display = 'none';
 }
 
-// ---------- Controls (WASD + Arrow keys) ----------
+// ---------- Keyboard controls (WASD + Arrow keys) ----------
 const keys = {};
 const GAME_KEYS = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'];
 
@@ -158,7 +159,7 @@ addEventListener('keydown', (e) => {
     if (e.target.matches('input, textarea')) return;
     const k = e.key.toLowerCase();
     if (GAME_KEYS.includes(k)) {
-        e.preventDefault(); // stops arrow keys from scrolling the page
+        e.preventDefault();
         keys[k] = true;
     }
 });
@@ -171,6 +172,53 @@ const backward = () => keys['s'] || keys['arrowdown'];
 const left = () => keys['a'] || keys['arrowleft'];
 const right = () => keys['d'] || keys['arrowright'];
 
+// ---------- Orbit camera (drag = spin 360, wheel/pinch = zoom, double-click = reset) ----------
+const DEFAULT_ORBIT = { yaw: 0, pitch: 0.42, dist: 18 };
+const orbit = { ...DEFAULT_ORBIT };
+const canvas = renderer.domElement;
+const pointers = new Map();
+let pinchDist = 0;
+
+canvas.addEventListener('pointerdown', (e) => {
+    canvas.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 2) {
+        const [a, b] = [...pointers.values()];
+        pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
+    }
+});
+
+canvas.addEventListener('pointermove', (e) => {
+    const p = pointers.get(e.pointerId);
+    if (!p) return;
+    const dx = e.clientX - p.x;
+    const dy = e.clientY - p.y;
+    p.x = e.clientX;
+    p.y = e.clientY;
+
+    if (pointers.size === 1) {
+        orbit.yaw -= dx * 0.008;
+        orbit.pitch = THREE.MathUtils.clamp(orbit.pitch + dy * 0.006, 0.05, 1.45);
+    } else if (pointers.size === 2) {
+        const [a, b] = [...pointers.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        orbit.dist = THREE.MathUtils.clamp(orbit.dist - (d - pinchDist) * 0.05, 8, 45);
+        pinchDist = d;
+    }
+});
+
+const endPointer = (e) => pointers.delete(e.pointerId);
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+
+canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    orbit.dist = THREE.MathUtils.clamp(orbit.dist + e.deltaY * 0.02, 8, 45);
+}, { passive: false });
+
+canvas.addEventListener('dblclick', () => Object.assign(orbit, DEFAULT_ORBIT));
+
+// ---------- Game loop ----------
 let speed = 0, heading = 0;
 const clock = new THREE.Clock();
 const camTarget = new THREE.Vector3();
@@ -217,13 +265,15 @@ function animate() {
     }
     near ? showPanel(near) : hidePanel();
 
-    // follow camera
+    // orbit camera around the ship
+    const a = heading + orbit.yaw;
+    const flat = Math.cos(orbit.pitch) * orbit.dist;
     camTarget.set(
-        ship.position.x - Math.sin(heading) * 16,
-        ship.position.y + 8,
-        ship.position.z - Math.cos(heading) * 16
+        ship.position.x - Math.sin(a) * flat,
+        ship.position.y + 2 + Math.sin(orbit.pitch) * orbit.dist,
+        ship.position.z - Math.cos(a) * flat
     );
-    camera.position.lerp(camTarget, 1 - Math.exp(-4 * dt));
+    camera.position.lerp(camTarget, 1 - Math.exp(-8 * dt));
     camera.lookAt(ship.position.x, ship.position.y + 2, ship.position.z);
 
     renderer.render(scene, camera);
