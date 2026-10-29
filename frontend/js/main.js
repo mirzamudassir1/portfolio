@@ -1100,12 +1100,9 @@ function setChip(chip, msg) {
     chip.style.display = msg ? 'block' : 'none';
 }
 
-// ---------- Nitro & Boost System ----------
+// ---------- Unlimited Nitro & High Speed Boost System ----------
 let lastForwardTap = 0;
 let nitroActive = false;
-let nitroFuel = 1.0;          // 0.0 to 1.0 (100% capacity)
-const NITRO_DURATION = 4.2;   // seconds of continuous boost
-const NITRO_RECHARGE = 3.2;   // seconds to fully recharge
 let nitroBurstTimer = 0;
 let currentPitch = 0, currentBank = 0;
 
@@ -1119,11 +1116,11 @@ const cyanMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff, transparent: true
 
 function updateNitroEffects(dt, boosting) {
     if (boosting && mode === 'ship') {
-        const count = 3;
+        const count = 4;
         for (let i = 0; i < count; i++) {
-            const lx = (Math.random() - 0.5) * 1.6;
-            const ly = 0.2 + Math.random() * 0.35;
-            const lz = -5.0 - Math.random() * 0.8;
+            const lx = (Math.random() - 0.5) * 1.8;
+            const ly = 0.2 + Math.random() * 0.4;
+            const lz = -5.0 - Math.random() * 0.9;
             const worldPos = boat.localToWorld(new THREE.Vector3(lx, ly, lz));
 
             const isFlame = Math.random() < 0.65;
@@ -1135,16 +1132,16 @@ function updateNitroEffects(dt, boosting) {
             pMesh.position.copy(worldPos);
             scene.add(pMesh);
 
-            const kickSpeed = -speed * 0.5 - Math.random() * 5;
+            const kickSpeed = -speed * 0.55 - Math.random() * 6;
             const vx = Math.sin(heading) * kickSpeed + (Math.random() - 0.5) * 2;
             const vz = Math.cos(heading) * kickSpeed + (Math.random() - 0.5) * 2;
-            const vy = 0.4 + Math.random() * 1.5;
+            const vy = 0.4 + Math.random() * 1.6;
 
             nitroParticles.push({
                 mesh: pMesh,
                 vx, vy, vz,
-                life: 0.5 + Math.random() * 0.3,
-                maxLife: 0.5 + Math.random() * 0.3,
+                life: 0.5 + Math.random() * 0.35,
+                maxLife: 0.5 + Math.random() * 0.35,
                 scaleGrow: !isFlame,
             });
         }
@@ -1167,36 +1164,27 @@ function updateNitroEffects(dt, boosting) {
         const prog = p.life / p.maxLife;
         p.mesh.material.opacity = prog * 0.9;
         if (p.scaleGrow) {
-            p.mesh.scale.setScalar((2.0 - prog) * 1.2);
+            p.mesh.scale.setScalar((2.0 - prog) * 1.25);
         } else {
-            p.mesh.scale.setScalar(prog * 1.4);
+            p.mesh.scale.setScalar(prog * 1.5);
         }
     }
 }
 
-// Nitro On-Screen HUD Gauge
+// Nitro On-Screen Speedometer & Status Badge
 const nitroHUD = document.createElement('div');
 nitroHUD.id = 'nitroHUD';
 nitroHUD.style.cssText =
-    'position:fixed;right:22px;bottom:26px;z-index:9;display:none;flex-direction:column;align-items:flex-end;gap:5px;' +
-    'background:#0b1d33e0;padding:10px 16px;border-radius:14px;border:2px solid #ffd166;box-shadow:0 4px 20px rgba(0,0,0,0.5);' +
-    'font-family:Segoe UI,sans-serif;color:#fff;user-select:none;pointer-events:none;transition:transform 0.15s ease,border-color 0.2s,box-shadow 0.2s;';
+    'position:fixed;right:22px;bottom:26px;z-index:9;display:none;align-items:center;gap:10px;' +
+    'background:#0b1d33e8;padding:8px 16px;border-radius:999px;border:2px solid #ffd166;' +
+    'box-shadow:0 4px 20px rgba(0,0,0,0.5);font-family:Segoe UI,sans-serif;color:#fff;user-select:none;' +
+    'pointer-events:none;transition:transform 0.15s ease,border-color 0.2s,box-shadow 0.2s;';
 
 const nitroLabel = document.createElement('div');
-nitroLabel.style.cssText = 'font:bold 13px Segoe UI,sans-serif;display:flex;align-items:center;gap:6px;letter-spacing:0.5px;';
-nitroLabel.innerHTML = '⚡ <span>NITRO</span> <span style="color:#ffd166;font-size:11px;">[Double-tap ↑/W]</span>';
+nitroLabel.style.cssText = 'font:bold 14px Segoe UI,sans-serif;display:flex;align-items:center;gap:6px;';
+nitroLabel.innerHTML = '⚡ <span>NITRO</span> <span style="color:#ffd166;font-size:12px;">[Double-tap ↑/W]</span>';
 
-const nitroTrack = document.createElement('div');
-nitroTrack.style.cssText = 'width:150px;height:9px;background:#142940;border-radius:999px;overflow:hidden;border:1px solid #4a6a8a;';
-
-const nitroBar = document.createElement('div');
-nitroBar.style.cssText =
-    'width:100%;height:100%;background:linear-gradient(90deg,#ff6b35,#f7c844,#00f0ff);border-radius:999px;' +
-    'box-shadow:0 0 10px #ff6b35;transition:width 0.05s linear;';
-
-nitroTrack.appendChild(nitroBar);
 nitroHUD.appendChild(nitroLabel);
-nitroHUD.appendChild(nitroTrack);
 document.body.appendChild(nitroHUD);
 
 // ---------- Keyboard controls ----------
@@ -1224,14 +1212,14 @@ addEventListener('keydown', (e) => {
         e.preventDefault();
         keys[e.code] = true;
     }
-    // Double-tap forward (ArrowUp or KeyW) for NITRO BOOST!
+    // Double-tap forward (ArrowUp or KeyW) for UNLIMITED HIGH SPEED NITRO!
     if ((e.code === 'ArrowUp' || e.code === 'KeyW') && !e.repeat) {
         const now = performance.now();
-        if (mode === 'ship' && state === 'sailing') {
-            if (now - lastForwardTap < 330 && nitroFuel > 0.12) {
+        if (mode === 'ship' && (state === 'sailing' || state === 'docked')) {
+            if (now - lastForwardTap < 350) {
                 nitroActive = true;
-                nitroBurstTimer = 1.4;
-                speed = Math.max(speed, 18) + 6;
+                nitroBurstTimer = 1.2;
+                speed = Math.max(speed, 22) + 6;
             }
         }
         lastForwardTap = now;
@@ -1242,9 +1230,7 @@ addEventListener('keyup', (e) => {
     if (e.code === 'Space' && tag !== 'INPUT' && tag !== 'TEXTAREA') e.preventDefault();
     keys[e.code] = false;
     if (e.code === 'ArrowUp' || e.code === 'KeyW') {
-        if (nitroBurstTimer <= 0) {
-            nitroActive = false;
-        }
+        nitroActive = false;
     }
 });
 addEventListener('blur', () => {
@@ -1811,26 +1797,13 @@ function animate() {
         } else if (mode !== 'ship') {
             speed = 0; // ship waits while the explorer is ashore
         } else {
-            // Nitro drain & recharge
             const isFwd = forward();
-            if (nitroBurstTimer > 0) {
-                nitroBurstTimer -= dt;
-                if (nitroBurstTimer <= 0 && !isFwd) nitroActive = false;
-            }
+            if (nitroBurstTimer > 0) nitroBurstTimer -= dt;
 
-            const isBoosting = nitroActive && (isFwd || nitroBurstTimer > 0) && nitroFuel > 0.01;
-            if (isBoosting) {
-                nitroFuel = Math.max(0, nitroFuel - dt / NITRO_DURATION);
-                if (nitroFuel <= 0) {
-                    nitroActive = false;
-                    nitroBurstTimer = 0;
-                }
-            } else {
-                nitroFuel = Math.min(1.0, nitroFuel + dt / NITRO_RECHARGE);
-            }
-
-            const maxSpeed = isBoosting ? 38 : 16;
-            const accel = isBoosting ? 26 : 8;
+            // Unlimited high-speed nitro when double-tapped!
+            const isBoosting = (nitroActive && isFwd) || nitroBurstTimer > 0;
+            const maxSpeed = isBoosting ? 40 : 16;
+            const accel = isBoosting ? 28 : 8;
 
             if (departTimer > 0) {
                 departTimer -= dt;
@@ -1839,8 +1812,10 @@ function animate() {
                 speed = Math.min(speed + accel * dt, maxSpeed);
             } else if (backward()) {
                 speed = Math.max(speed - 8 * dt, -5);
+                nitroActive = false;
+                nitroBurstTimer = 0;
             } else {
-                speed *= 1 - (isBoosting ? 0.3 : 0.6) * dt;
+                speed *= 1 - (isBoosting ? 0.25 : 0.6) * dt;
             }
 
             const turn = departTimer > 0 ? 0 : (left() ? 1 : 0) - (right() ? 1 : 0);
@@ -1853,7 +1828,7 @@ function animate() {
             resolveCollisions();
         }
 
-        const isBoosting = nitroActive && (forward() || nitroBurstTimer > 0) && nitroFuel > 0.01 && mode === 'ship' && state === 'sailing';
+        const isBoosting = ((nitroActive && forward()) || nitroBurstTimer > 0) && mode === 'ship' && state === 'sailing';
         updateNitroEffects(dt, isBoosting);
 
         // Dynamic pitch (bow lift out of sea) & bank (lean into turns at speed)
@@ -1924,27 +1899,26 @@ function animate() {
         setChip(eChip, eMsg);
 
         // ---- Nitro HUD & Camera FOV kick ----
-        const isBoostingNow = nitroActive && (forward() || nitroBurstTimer > 0) && nitroFuel > 0.01 && mode === 'ship' && state === 'sailing';
+        const isBoostingNow = ((nitroActive && forward()) || nitroBurstTimer > 0) && mode === 'ship' && state === 'sailing';
         if (mode === 'ship' && state === 'sailing') {
             nitroHUD.style.display = 'flex';
             if (isBoostingNow) {
-                nitroLabel.innerHTML = '🔥 <span style="color:#ff6b35;font-weight:900;">NITRO BOOST!</span> <span style="color:#00f0ff;font-size:12px;">' + Math.round(speed) + ' KTS</span>';
-                nitroHUD.style.transform = 'scale(1.05)';
+                nitroLabel.innerHTML = '🔥 <span style="color:#ff6b35;font-weight:900;letter-spacing:1px;">NITRO ACTIVE</span> <span style="color:#00f0ff;font-weight:bold;margin-left:4px;">' + Math.round(speed) + ' KTS</span>';
+                nitroHUD.style.transform = 'scale(1.06)';
                 nitroHUD.style.borderColor = '#ff6b35';
-                nitroHUD.style.boxShadow = '0 0 25px rgba(255,107,53,0.7)';
+                nitroHUD.style.boxShadow = '0 0 25px rgba(255,107,53,0.8)';
             } else {
-                nitroLabel.innerHTML = '⚡ <span>NITRO</span> <span style="color:#ffd166;font-size:11px;">' + (nitroFuel > 0.15 ? '[Double-tap ↑/W]' : 'CHARGING...') + '</span>';
+                nitroLabel.innerHTML = '⛵ <span style="color:#ffd166;">CRUISE: ' + Math.round(speed) + ' KTS</span> <span style="color:#8ab4f8;font-size:11px;margin-left:4px;">[Double-tap ↑ = NITRO]</span>';
                 nitroHUD.style.transform = 'scale(1)';
                 nitroHUD.style.borderColor = '#ffd166';
                 nitroHUD.style.boxShadow = '0 4px 20px rgba(0,0,0,0.5)';
             }
-            nitroBar.style.width = Math.round(nitroFuel * 100) + '%';
         } else {
             nitroHUD.style.display = 'none';
         }
 
         // Camera FOV expansion during nitro for extreme sense of speed
-        const targetFov = isBoostingNow ? 74 : 60;
+        const targetFov = isBoostingNow ? 75 : 60;
         if (Math.abs(camera.fov - targetFov) > 0.1) {
             camera.fov += (targetFov - camera.fov) * Math.min(1, 5 * dt);
             camera.updateProjectionMatrix();
