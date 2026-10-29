@@ -10,6 +10,10 @@ function toast(text) {
     setTimeout(() => d.remove(), 8000);
 }
 const wrapPI = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+const easeOutBack = (x) => {
+    const c1 = 1.70158, c3 = c1 + 1;
+    return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+};
 
 // ---------- Scene ----------
 const scene = new THREE.Scene();
@@ -401,11 +405,69 @@ const ropes = [
     scene.add(r.mesh);
     return r;
 });
-const _a = new THREE.Vector3(), _d = new THREE.Vector3();
+const _a = new THREE.Vector3(), _d = new THREE.Vector3(), _deck = new THREE.Vector3();
 function stretchRope(mesh, a, b) {
     mesh.position.copy(a).add(b).multiplyScalar(0.5);
     mesh.scale.set(1, a.distanceTo(b), 1);
     mesh.quaternion.setFromUnitVectors(Y_AXIS, _d.copy(b).sub(a).normalize());
+}
+
+// ---------- The tiny explorer ----------
+const MAN_SCALE = 0.6; // make him bigger or smaller here
+const manGroup = new THREE.Group();
+manGroup.visible = false;
+scene.add(manGroup);
+
+function mpart(geo, color, x, y, z, parent = manGroup) {
+    const m = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color, flatShading: true }));
+    m.position.set(x, y, z);
+    parent.add(m);
+    return m;
+}
+const SKIN = 0xf1c27d;
+function makeLimb(x, y, build) {
+    const pv = new THREE.Group();
+    pv.position.set(x, y, 0);
+    build(pv);
+    manGroup.add(pv);
+    return pv;
+}
+const legL = makeLimb(-0.09, 0.46, (p) => {
+    mpart(new THREE.BoxGeometry(0.16, 0.2, 0.16), 0x1f5fbf, 0, -0.1, 0, p);   // shorts
+    mpart(new THREE.BoxGeometry(0.11, 0.2, 0.11), SKIN, 0, -0.3, 0, p);       // shin
+    mpart(new THREE.BoxGeometry(0.13, 0.06, 0.2), 0x5a3a20, 0, -0.43, 0.03, p); // sandal
+});
+const legR = makeLimb(0.09, 0.46, (p) => {
+    mpart(new THREE.BoxGeometry(0.16, 0.2, 0.16), 0x1f5fbf, 0, -0.1, 0, p);
+    mpart(new THREE.BoxGeometry(0.11, 0.2, 0.11), SKIN, 0, -0.3, 0, p);
+    mpart(new THREE.BoxGeometry(0.13, 0.06, 0.2), 0x5a3a20, 0, -0.43, 0.03, p);
+});
+const armL = makeLimb(-0.22, 0.82, (p) => mpart(new THREE.BoxGeometry(0.09, 0.34, 0.09), SKIN, 0, -0.16, 0, p));
+const armR = makeLimb(0.22, 0.82, (p) => mpart(new THREE.BoxGeometry(0.09, 0.34, 0.09), SKIN, 0, -0.16, 0, p));
+mpart(new THREE.BoxGeometry(0.34, 0.38, 0.2), 0xd62828, 0, 0.65, 0);       // red vest
+mpart(new THREE.BoxGeometry(0.35, 0.06, 0.21), 0xf2c14e, 0, 0.49, 0);      // belt
+mpart(new THREE.SphereGeometry(0.17, 16, 12), SKIN, 0, 1.0, 0);            // head
+mpart(new THREE.SphereGeometry(0.025, 8, 8), 0x111111, -0.065, 1.02, 0.155); // eyes
+mpart(new THREE.SphereGeometry(0.025, 8, 8), 0x111111, 0.065, 1.02, 0.155);
+mpart(new THREE.CylinderGeometry(0.31, 0.31, 0.03, 20), 0xf2d36b, 0, 1.1, 0); // straw hat brim
+mpart(new THREE.SphereGeometry(0.17, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), 0xf2d36b, 0, 1.105, 0);
+mpart(new THREE.CylinderGeometry(0.176, 0.176, 0.05, 16), 0xd62828, 0, 1.13, 0); // hat band
+
+let walkPhase = 0, manMoving = false, airArms = false;
+function animateLimbs(dt) {
+    if (airArms) {
+        armL.rotation.x = armR.rotation.x = -2.6;
+        legL.rotation.x = 0.4;
+        legR.rotation.x = -0.4;
+        return;
+    }
+    if (manMoving) walkPhase += dt * 11;
+    const sw = manMoving ? Math.sin(walkPhase) * 0.8 : 0;
+    const k = Math.min(1, 14 * dt);
+    legL.rotation.x += (sw - legL.rotation.x) * k;
+    legR.rotation.x += (-sw - legR.rotation.x) * k;
+    armL.rotation.x += (-sw - armL.rotation.x) * k;
+    armR.rotation.x += (sw - armR.rotation.x) * k;
 }
 
 // ---------- Islands (loaded from MongoDB via API) ----------
@@ -444,6 +506,41 @@ function buildIsland(d) {
     scene.add(g);
 }
 
+// treasure chests (open when the explorer walks up to them)
+const chests = [];
+function buildChest(d, i) {
+    const th = i * 2.1 + 0.6;
+    const cx = d.x + Math.cos(th) * d.radius * 0.5;
+    const cz = d.z + Math.sin(th) * d.radius * 0.5;
+    d._chest = { x: cx, z: cz };
+
+    const g = new THREE.Group();
+    g.position.set(cx, 2.95, cz);
+    g.rotation.y = Math.atan2(Math.cos(th), Math.sin(th));
+    const cm = (w, h, dd, color, x, y, z, parent = g) => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, dd), hm(color));
+        m.position.set(x, y, z);
+        parent.add(m);
+        return m;
+    };
+    cm(0.9, 0.5, 0.6, 0x8a5a30, 0, 0.25, 0);
+    cm(0.94, 0.08, 0.64, 0xf2c14e, 0, 0.3, 0);
+    const pivot = new THREE.Group();
+    pivot.position.set(0, 0.5, -0.3);
+    cm(0.9, 0.2, 0.6, 0xa06a38, 0, 0.1, 0.3, pivot);
+    cm(0.12, 0.12, 0.05, 0xf2c14e, 0, -0.02, 0.62, pivot);
+    g.add(pivot);
+    const glow = new THREE.Mesh(
+        new THREE.SphereGeometry(0.2, 12, 12),
+        new THREE.MeshBasicMaterial({ color: 0xffd166 })
+    );
+    glow.position.set(0, 0.6, 0);
+    glow.visible = false;
+    g.add(glow);
+    scene.add(g);
+    chests.push({ pivot, glow, x: cx, z: cz, open: 0 });
+}
+
 let islands = [];
 fetch('/api/islands')
     .then((r) => r.json())
@@ -453,12 +550,55 @@ fetch('/api/islands')
             return;
         }
         islands = data;
-        islands.forEach(buildIsland);
+        islands.forEach((d, i) => { buildIsland(d); buildChest(d, i); });
     })
     .catch((err) => {
         console.error(err);
         toast('Could not load islands. Is the server running?');
     });
+
+// ---------- Walkable ground (for the explorer) ----------
+const SOLIDS = [
+    { x: -6, z: -33, r: 0.6 }, { x: 5, z: -35, r: 0.6 }, { x: -2, z: -38, r: 0.6 }, // palms
+    { x: -0.9, z: -11.6, r: 0.65 }, { x: 0.2, z: -12.2, r: 0.55 },                  // crates
+    { x: 1.0, z: -11.8, r: 0.5 },                                                   // barrel
+    { x: 3.2, z: -16, r: 0.35 }, { x: -1.4, z: 1.6, r: 0.2 },                       // sign, lantern
+    { x: 1.45, z: BERTH.z + 2.6, r: 0.3 }, { x: 1.45, z: BERTH.z - 2.6, r: 0.3 },   // bollards
+];
+
+function islandSurface(d, r) {
+    if (d < 0.62 * r) return 2.95;
+    if (d < 0.702 * r) return 2.95 - ((d - 0.62 * r) / (0.082 * r)) * 0.95;
+    if (d < 0.9 * r) return 2.0;
+    return 2.0 - ((d - 0.9 * r) / (0.04 * r)) * 0.5;
+}
+
+// returns the ground height at (x, z), or null if it is water / blocked
+function groundHeight(x, z) {
+    let best = null;
+    const take = (h) => { if (best === null || h > best) best = h; };
+
+    for (const d of islands) {
+        const dist = Math.hypot(x - d.x, z - d.z);
+        if (dist < d.radius * 0.94) {
+            if (dist < 0.8) return null; // palm trunk
+            if (d._chest && Math.hypot(x - d._chest.x, z - d._chest.z) < 0.75) return null;
+            take(islandSurface(dist, d.radius));
+        }
+    }
+    const hd = Math.hypot(x - HARBOR.x, z - HARBOR.z);
+    if (hd < 14.2) take(hd < 11 ? 2.4 : hd < 11.5 ? 2.4 - ((hd - 11) / 0.5) * 0.4 : 2.0);
+
+    if (x > PIER.x0 && x < PIER.x1) {
+        if (z >= PIER.z0 && z <= PIER.z1) take(PIER.top);
+        else if (z >= PIER.z0 - 1 && z < PIER.z0) take(1.67);
+        else if (z >= PIER.z0 - 2 && z < PIER.z0 - 1) take(1.84);
+    }
+    if (best === null) return null;
+    for (const s of SOLIDS) if (Math.hypot(x - s.x, z - s.z) < s.r) return null;
+    if (x > -8.2 && x < -3.8 && z > -25.7 && z < -22.3) return null; // harbor house
+    return best;
+}
 
 // ---------- Info panel ----------
 const panel = document.getElementById('panel');
@@ -523,12 +663,17 @@ function hidePanel() {
 }
 
 // ---------- Game state ----------
-let state = 'docked';        // docked | sailing | docking
+let state = 'docked';        // ship: docked | sailing | docking
+let mode = 'ship';           // who you control: ship | popping | onfoot | boarding
 let speed = 0;
 let heading = BERTH.heading;
-let departTimer = 0;         // auto-throttle right after casting off
-let moor = 1, moorTarget = 1; // 1 = tied up, 0 = released
+let departTimer = 0;
+let moor = 1, moorTarget = 1;
 let camGoal = null;
+
+let manT = 0, manY = 0, manVy = 0, manGrounded = true;
+let landing = null;
+const jumpFrom = new THREE.Vector3();
 
 const DEFAULT_ORBIT = { yaw: 0, pitch: 0.38, dist: 14 };
 const DOCK_VIEW = { yaw: -2.2, pitch: 0.32, dist: 16 };
@@ -539,7 +684,60 @@ boat.position.set(BERTH.x, 0.4, BERTH.z);
 const canDock = () =>
     boat.position.x > 2 && Math.hypot(boat.position.x - BERTH.x, boat.position.z - BERTH.z) < 9;
 
+const canDisembark = () =>
+    mode === 'ship' &&
+    (state === 'docked' || (state === 'sailing' && departTimer <= 0 && Math.abs(speed) < 4));
+
+// nearest place the explorer can jump to from the ship
+function findLanding() {
+    const bx = boat.position.x, bz = boat.position.z;
+    let best = null, bestD = 9;
+    const consider = (x, z) => {
+        const h = groundHeight(x, z);
+        if (h === null) return;
+        const d = Math.hypot(x - bx, z - bz);
+        if (d < bestD) { bestD = d; best = { x, z, h }; }
+    };
+    for (const d of islands) {
+        const dx = bx - d.x, dz = bz - d.z, dist = Math.hypot(dx, dz) || 1;
+        consider(d.x + (dx / dist) * d.radius * 0.85, d.z + (dz / dist) * d.radius * 0.85);
+    }
+    const hx = bx - HARBOR.x, hz = bz - HARBOR.z, hdist = Math.hypot(hx, hz) || 1;
+    consider(HARBOR.x + (hx / hdist) * 13.2, HARBOR.z + (hz / hdist) * 13.2);
+    consider(0.9, THREE.MathUtils.clamp(bz, PIER.z0 + 1, PIER.z1 - 0.6));
+    return best;
+}
+
+const nearBoat = () =>
+    Math.hypot(manGroup.position.x - boat.position.x, manGroup.position.z - boat.position.z) < 8;
+
+function startPop() {
+    const l = findLanding();
+    if (!canDisembark() || !l) return;
+    landing = l;
+    mode = 'popping';
+    manT = 0;
+    speed = 0;
+    manGroup.visible = true;
+    manGroup.scale.setScalar(0.001);
+    orbit.yaw = orbit.yaw + heading; // keep the same view angle, now absolute
+    camGoal = { yaw: orbit.yaw, pitch: 0.42, dist: 6 };
+}
+
+function startBoard() {
+    if (mode !== 'onfoot' || !nearBoat()) return;
+    mode = 'boarding';
+    manT = 0;
+    jumpFrom.copy(manGroup.position);
+}
+
+function jump() {
+    if (manGrounded) { manVy = 5; manGrounded = false; }
+}
+
 function handleSpace() {
+    if (mode === 'onfoot') { jump(); return; }
+    if (mode !== 'ship') return;
     if (state === 'docked') {
         state = 'sailing';
         moorTarget = 0;
@@ -554,17 +752,35 @@ function handleSpace() {
     }
 }
 
-// on-screen prompt (also clickable for touch screens)
-const promptEl = document.createElement('div');
-promptEl.style.cssText =
-    'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:8;display:none;' +
-    'background:#0b1d33dd;color:#fff;padding:10px 22px;border-radius:999px;cursor:pointer;' +
-    'font:600 16px Segoe UI,sans-serif;border:2px solid #ffd166;user-select:none;';
-promptEl.onclick = handleSpace;
-document.body.appendChild(promptEl);
-let lastMsg = '';
+function handleE() {
+    if (mode === 'ship') startPop();
+    else if (mode === 'onfoot') startBoard();
+}
 
-// ---------- Keyboard controls (WASD + Arrows + SPACE) ----------
+// on-screen prompts (also clickable for touch screens)
+const promptBox = document.createElement('div');
+promptBox.style.cssText =
+    'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:8;display:flex;gap:10px;';
+document.body.appendChild(promptBox);
+function makeChip(onClick) {
+    const c = document.createElement('div');
+    c.style.cssText =
+        'display:none;background:#0b1d33dd;color:#fff;padding:10px 20px;border-radius:999px;' +
+        'cursor:pointer;font:600 16px Segoe UI,sans-serif;border:2px solid #ffd166;user-select:none;';
+    c.onclick = onClick;
+    promptBox.appendChild(c);
+    return c;
+}
+const spaceChip = makeChip(() => handleSpace());
+const eChip = makeChip(() => handleE());
+function setChip(chip, msg) {
+    if (chip._m === msg) return;
+    chip._m = msg;
+    chip.textContent = msg;
+    chip.style.display = msg ? 'block' : 'none';
+}
+
+// ---------- Keyboard controls ----------
 const keys = {};
 const GAME_CODES = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
 
@@ -574,6 +790,10 @@ addEventListener('keydown', (e) => {
     if (e.code === 'Space') {
         e.preventDefault();
         if (!e.repeat) handleSpace();
+        return;
+    }
+    if (e.code === 'KeyE') {
+        if (!e.repeat) handleE();
         return;
     }
     if (GAME_CODES.includes(e.code)) {
@@ -597,6 +817,7 @@ const right = () => keys.KeyD || keys.ArrowRight;
 const canvas = renderer.domElement;
 const pointers = new Map();
 let pinchDist = 0;
+const minDist = () => (mode === 'ship' ? 6 : 2.5);
 
 canvas.addEventListener('pointerdown', (e) => {
     window.focus();
@@ -624,7 +845,7 @@ canvas.addEventListener('pointermove', (e) => {
     } else if (pointers.size === 2) {
         const [a, b] = [...pointers.values()];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
-        orbit.dist = THREE.MathUtils.clamp(orbit.dist - (d - pinchDist) * 0.04, 6, 45);
+        orbit.dist = THREE.MathUtils.clamp(orbit.dist - (d - pinchDist) * 0.04, minDist(), 45);
         pinchDist = d;
     }
 });
@@ -636,15 +857,16 @@ canvas.addEventListener('pointercancel', endPointer);
 canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
     camGoal = null;
-    orbit.dist = THREE.MathUtils.clamp(orbit.dist + e.deltaY * 0.02, 6, 45);
+    orbit.dist = THREE.MathUtils.clamp(orbit.dist + e.deltaY * 0.02, minDist(), 45);
 }, { passive: false });
 
 canvas.addEventListener('dblclick', () => {
     camGoal = null;
-    Object.assign(orbit, state === 'sailing' ? DEFAULT_ORBIT : DOCK_VIEW);
+    if (mode === 'ship') Object.assign(orbit, state === 'sailing' ? DEFAULT_ORBIT : DOCK_VIEW);
+    else Object.assign(orbit, { yaw: manGroup.rotation.y, pitch: 0.42, dist: 6 });
 });
 
-// ---------- Collisions ----------
+// ---------- Ship collisions ----------
 const BOAT_RADIUS = 2.4;
 function resolveCollisions() {
     const p = boat.position;
@@ -669,6 +891,109 @@ function resolveCollisions() {
         else p.z = PIER.z1 + m;
         speed *= 0.3;
     }
+}
+
+// ---------- Explorer updates ----------
+const deckPoint = () => boat.localToWorld(_deck.set(0, 0.8, -0.2));
+
+function updatePop(dt) {
+    manT += dt;
+    const deck = deckPoint();
+    if (manT < 0.4) {
+        manGroup.position.copy(deck);
+        manGroup.scale.setScalar(Math.max(0.001, MAN_SCALE * easeOutBack(manT / 0.4)));
+        jumpFrom.copy(deck);
+        airArms = false;
+    } else {
+        const s = Math.min((manT - 0.4) / 0.85, 1);
+        manGroup.scale.setScalar(MAN_SCALE);
+        manGroup.position.set(
+            jumpFrom.x + (landing.x - jumpFrom.x) * s,
+            jumpFrom.y + (landing.h - jumpFrom.y) * s + Math.sin(Math.PI * s) * 1.6,
+            jumpFrom.z + (landing.z - jumpFrom.z) * s
+        );
+        airArms = true;
+        if (s >= 1) {
+            mode = 'onfoot';
+            manY = landing.h;
+            manVy = 0;
+            manGrounded = true;
+            manGroup.position.y = manY;
+            airArms = false;
+        }
+    }
+    manGroup.rotation.y = Math.atan2(landing.x - manGroup.position.x, landing.z - manGroup.position.z);
+    manMoving = false;
+}
+
+function updateBoard(dt) {
+    manT += dt;
+    const deck = deckPoint();
+    if (manT < 0.85) {
+        const s = manT / 0.85;
+        manGroup.position.set(
+            jumpFrom.x + (deck.x - jumpFrom.x) * s,
+            jumpFrom.y + (deck.y - jumpFrom.y) * s + Math.sin(Math.PI * s) * 1.6,
+            jumpFrom.z + (deck.z - jumpFrom.z) * s
+        );
+        airArms = true;
+        manGroup.rotation.y = Math.atan2(deck.x - manGroup.position.x, deck.z - manGroup.position.z);
+    } else {
+        const k = Math.min((manT - 0.85) / 0.35, 1);
+        manGroup.position.copy(deck);
+        manGroup.scale.setScalar(Math.max(0.001, MAN_SCALE * (1 - k * k)));
+        airArms = false;
+        if (k >= 1) {
+            mode = 'ship';
+            manGroup.visible = false;
+            orbit.yaw = wrapPI(orbit.yaw - heading);
+            camGoal = state === 'docked' ? { ...DOCK_VIEW } : { ...DEFAULT_ORBIT };
+        }
+    }
+    manMoving = false;
+}
+
+function tryMove(dx, dz) {
+    const p = manGroup.position;
+    const nx = p.x + dx, nz = p.z + dz;
+    const h = groundHeight(nx, nz);
+    if (h === null || h > manY + 0.9) return;
+    p.x = nx;
+    p.z = nz;
+}
+
+function updateMan(dt) {
+    const a = orbit.yaw; // camera direction (absolute while on foot)
+    const f = (forward() ? 1 : 0) - (backward() ? 1 : 0);
+    const s = (right() ? 1 : 0) - (left() ? 1 : 0);
+    let mx = Math.sin(a) * f - Math.cos(a) * s;
+    let mz = Math.cos(a) * f + Math.sin(a) * s;
+    const len = Math.hypot(mx, mz);
+    manMoving = len > 0.01;
+    if (manMoving) {
+        mx /= len; mz /= len;
+        const sp = 4.2 * dt;
+        tryMove(mx * sp, 0);
+        tryMove(0, mz * sp);
+        const face = Math.atan2(mx, mz);
+        manGroup.rotation.y += wrapPI(face - manGroup.rotation.y) * Math.min(1, 12 * dt);
+    }
+
+    const p = manGroup.position;
+    const gh = groundHeight(p.x, p.z);
+    const groundY = gh === null ? manY : gh;
+    if (manVy > 0 || manY > groundY + 0.02) {
+        manVy -= 16 * dt;
+        manY += manVy * dt;
+        manGrounded = false;
+        if (manY <= groundY) { manY = groundY; manVy = 0; manGrounded = true; }
+    } else {
+        manVy = 0;
+        manGrounded = true;
+        if (manY < groundY) manY = Math.min(groundY, manY + 7 * dt);
+    }
+    p.y = manY;
+    airArms = !manGrounded;
 }
 
 // ---------- Game loop ----------
@@ -713,6 +1038,8 @@ function animate() {
                 moorTarget = 1;
                 camGoal = { ...DOCK_VIEW };
             }
+        } else if (mode !== 'ship') {
+            speed = 0; // ship waits while the explorer is ashore
         } else {
             if (departTimer > 0) {
                 departTimer -= dt;
@@ -749,22 +1076,42 @@ function animate() {
         plankPivot.rotation.z = -PLANK_ANGLE + (1 - moor) * 0.9;
         plankMat.opacity = moor;
 
-        // ---- island info panel ----
-        let near = null;
-        for (const d of islands) {
-            if (Math.hypot(boat.position.x - d.x, boat.position.z - d.z) < d.radius + 20) near = d;
-        }
-        near ? showPanel(near) : hidePanel();
+        // ---- explorer ----
+        if (mode === 'popping') updatePop(dt);
+        else if (mode === 'onfoot') updateMan(dt);
+        else if (mode === 'boarding') updateBoard(dt);
+        if (mode !== 'ship') animateLimbs(dt);
 
-        // ---- on-screen prompt ----
-        let msg = '';
-        if (state === 'docked') msg = 'Press SPACE to set sail ⛵';
-        else if (state === 'sailing' && departTimer <= 0 && canDock()) msg = 'Press SPACE to dock ⚓';
-        if (msg !== lastMsg) {
-            promptEl.textContent = msg;
-            promptEl.style.display = msg ? 'block' : 'none';
-            lastMsg = msg;
+        // ---- treasure chests ----
+        chests.forEach((c) => {
+            const near = mode === 'onfoot' && Math.hypot(manGroup.position.x - c.x, manGroup.position.z - c.z) < 2.4;
+            c.open += ((near ? 1 : 0) - c.open) * Math.min(1, 5 * dt);
+            c.pivot.rotation.x = -1.25 * c.open;
+            c.glow.visible = c.open > 0.3;
+            c.glow.scale.setScalar(1 + Math.sin(t * 6) * 0.15);
+        });
+
+        // ---- island info panel ----
+        const onFoot = mode !== 'ship';
+        const fp = onFoot ? manGroup.position : boat.position;
+        let nearIsland = null;
+        for (const d of islands) {
+            if (Math.hypot(fp.x - d.x, fp.z - d.z) < d.radius + (onFoot ? 3 : 20)) nearIsland = d;
         }
+        nearIsland ? showPanel(nearIsland) : hidePanel();
+
+        // ---- on-screen prompts ----
+        let spaceMsg = '', eMsg = '';
+        if (mode === 'ship') {
+            if (state === 'docked') spaceMsg = 'SPACE · Set sail ⛵';
+            else if (state === 'sailing' && departTimer <= 0 && canDock()) spaceMsg = 'SPACE · Dock ⚓';
+            if (canDisembark() && findLanding()) eMsg = 'E · Go ashore 🧍';
+        } else if (mode === 'onfoot') {
+            spaceMsg = 'SPACE · Jump';
+            if (nearBoat()) eMsg = 'E · Board ship ⚓';
+        }
+        setChip(spaceChip, spaceMsg);
+        setChip(eChip, eMsg);
 
         // ---- camera ----
         if (camGoal) {
@@ -773,16 +1120,20 @@ function animate() {
             orbit.pitch += (camGoal.pitch - orbit.pitch) * k;
             orbit.dist += (camGoal.dist - orbit.dist) * k;
         }
-        const a = heading + orbit.yaw;
+        const manFocus = mode !== 'ship';
+        const a = (manFocus ? 0 : heading) + orbit.yaw;
         const flat = Math.cos(orbit.pitch) * orbit.dist;
+        const fx = manFocus ? manGroup.position.x : boat.position.x;
+        const fz = manFocus ? manGroup.position.z : boat.position.z;
+        const fy = manFocus ? manGroup.position.y + 0.5 : boat.position.y + 1.5;
         camTarget.set(
-            boat.position.x - Math.sin(a) * flat,
-            boat.position.y + 1.5 + Math.sin(orbit.pitch) * orbit.dist,
-            boat.position.z - Math.cos(a) * flat
+            fx - Math.sin(a) * flat,
+            fy + Math.sin(orbit.pitch) * orbit.dist,
+            fz - Math.cos(a) * flat
         );
         if (!camReady) { camera.position.copy(camTarget); camReady = true; }
         else camera.position.lerp(camTarget, 1 - Math.exp(-8 * dt));
-        camera.lookAt(boat.position.x, boat.position.y + 1.8, boat.position.z);
+        camera.lookAt(fx, manFocus ? fy : boat.position.y + 1.8, fz);
     } catch (err) {
         if (!errorShown) { console.error(err); toast('Error: ' + err.message); errorShown = true; }
     }
