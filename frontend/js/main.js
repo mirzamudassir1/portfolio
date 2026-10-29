@@ -365,11 +365,172 @@ const bollards = [BERTH.z + 2.6, BERTH.z - 2.6].map((z) => {
     return new THREE.Vector3(1.45, 1.95, z);
 });
 
-// crates, barrel, lantern
-hbox(0.8, 0.8, 0.8, 0xa8723c, -0.9, 1.9, -11.6);
-hbox(0.6, 0.6, 0.6, 0xb8823c, -0.9, 2.6, -11.6);
-hbox(0.7, 0.7, 0.7, 0xa8723c, 0.2, 1.85, -12.2);
-hcyl(0.4, 0.4, 0.9, 0x7a4a28, 1.0, 1.95, -11.8, 12);
+// ---------- Dynamic Interactive Props (Crates & Barrel) ----------
+const dynamicProps = [];
+
+// Lightweight particle system for impact dust & water splashes
+const particles = [];
+const particleGeo = new THREE.SphereGeometry(0.06, 6, 6);
+const splashMat = new THREE.MeshBasicMaterial({ color: 0xe0f7fa });
+const dustMat = new THREE.MeshBasicMaterial({ color: 0xc8a46a });
+
+function spawnParticles(x, y, z, count = 6, isSplash = false) {
+    for (let i = 0; i < count; i++) {
+        const p = new THREE.Mesh(particleGeo, isSplash ? splashMat : dustMat);
+        p.position.set(x, y, z);
+        scene.add(p);
+        const ang = Math.random() * Math.PI * 2;
+        const spd = 0.8 + Math.random() * 1.8;
+        particles.push({
+            mesh: p,
+            vx: Math.cos(ang) * spd,
+            vy: 1.2 + Math.random() * 2.0,
+            vz: Math.sin(ang) * spd,
+            life: 0.5,
+            maxLife: 0.5,
+        });
+    }
+}
+
+function updateParticles(dt) {
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.life -= dt;
+        if (p.life <= 0) {
+            scene.remove(p.mesh);
+            p.mesh.geometry.dispose();
+            particles.splice(i, 1);
+            continue;
+        }
+        p.vy -= 9.8 * dt;
+        p.mesh.position.x += p.vx * dt;
+        p.mesh.position.y += p.vy * dt;
+        p.mesh.position.z += p.vz * dt;
+        p.mesh.scale.setScalar(Math.max(0.01, p.life / p.maxLife));
+    }
+}
+
+function createBoxProp({ id, w, h, d, color, x, y, z, mass = 1.0 }) {
+    const geo = new THREE.BoxGeometry(w, h, d);
+    const m = new THREE.Mesh(geo, hm(color));
+    m.position.set(x, y, z);
+    scene.add(m);
+    const prop = {
+        id,
+        type: 'box',
+        mesh: m,
+        w, h, d,
+        radius: Math.hypot(w, d) * 0.42,
+        mass,
+        x, y, z,
+        origX: x, origY: y, origZ: z,
+        vx: 0, vy: 0, vz: 0,
+        rotX: 0, rotY: 0, rotZ: 0,
+        vRotX: 0, vRotY: 0, vRotZ: 0,
+        grounded: true,
+        floating: false,
+        restingOn: null,
+    };
+    dynamicProps.push(prop);
+    return prop;
+}
+
+function createCylinderProp({ id, rt, rb, h, color, x, y, z, mass = 1.2 }) {
+    const geo = new THREE.CylinderGeometry(rt, rb, h, 14);
+    const m = new THREE.Mesh(geo, hm(color));
+    m.position.set(x, y, z);
+    scene.add(m);
+    const prop = {
+        id,
+        type: 'barrel',
+        mesh: m,
+        w: rt * 2, h, d: rt * 2,
+        radius: rt,
+        mass,
+        x, y, z,
+        origX: x, origY: y, origZ: z,
+        vx: 0, vy: 0, vz: 0,
+        rotX: 0, rotY: 0, rotZ: 0,
+        vRotX: 0, vRotY: 0, vRotZ: 0,
+        grounded: true,
+        floating: false,
+        restingOn: null,
+    };
+    dynamicProps.push(prop);
+    return prop;
+}
+
+// Bottom crate of stack
+const crateStackBottom = createBoxProp({
+    id: 'crate_bottom',
+    w: 0.8, h: 0.8, d: 0.8,
+    color: 0xa8723c,
+    x: -0.9, y: 1.9, z: -11.6,
+    mass: 1.2,
+});
+
+// Top crate stacked on bottom crate
+const crateStackTop = createBoxProp({
+    id: 'crate_top',
+    w: 0.6, h: 0.6, d: 0.6,
+    color: 0xb8823c,
+    x: -0.9, y: 2.6, z: -11.6,
+    mass: 0.6,
+});
+crateStackTop.restingOn = crateStackBottom;
+
+// Single crate
+const crateSingle = createBoxProp({
+    id: 'crate_single',
+    w: 0.7, h: 0.7, d: 0.7,
+    color: 0xa8723c,
+    x: 0.2, y: 1.85, z: -12.2,
+    mass: 1.0,
+});
+
+// Wooden barrel
+const barrelProp = createCylinderProp({
+    id: 'barrel',
+    rt: 0.4, rb: 0.4, h: 0.9,
+    color: 0x7a4a28,
+    x: 1.0, y: 1.95, z: -11.8,
+    mass: 1.3,
+});
+
+function getPropSurface(x, z, time) {
+    if (x >= PIER.x0 - 0.05 && x <= PIER.x1 + 0.05 && z >= PIER.z0 && z <= PIER.z1) {
+        return { height: PIER.top, isWater: false };
+    }
+    if (z < PIER.z0) {
+        if (x > -3.5 && x < 3.5) {
+            if (z >= PIER.z0 - 1.0) return { height: 1.67, isWater: false };
+            if (z >= PIER.z0 - 2.0) return { height: 1.84, isWater: false };
+        }
+        const hd = Math.hypot(x - HARBOR.x, z - HARBOR.z);
+        if (hd < 14.2) {
+            const h = hd < 11 ? 2.4 : hd < 11.5 ? 2.4 - ((hd - 11) / 0.5) * 0.4 : 2.0;
+            return { height: h, isWater: false };
+        }
+    }
+    const waveY = Math.sin(x * 0.06 + time) * 0.5 + Math.cos(z * 0.05 + time * 0.8) * 0.5;
+    return { height: waveY, isWater: true };
+}
+
+function resetProps() {
+    for (const prop of dynamicProps) {
+        prop.x = prop.origX;
+        prop.y = prop.origY;
+        prop.z = prop.origZ;
+        prop.vx = 0; prop.vy = 0; prop.vz = 0;
+        prop.rotX = 0; prop.rotY = 0; prop.rotZ = 0;
+        prop.vRotX = 0; prop.vRotY = 0; prop.vRotZ = 0;
+        prop.floating = false;
+        prop.grounded = true;
+        prop.mesh.position.set(prop.x, prop.y, prop.z);
+        prop.mesh.rotation.set(0, 0, 0);
+    }
+    crateStackTop.restingOn = crateStackBottom;
+}
 hcyl(0.07, 0.07, 2.2, 0x2b1e18, -1.4, 2.6, 1.6, 8);
 const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 12), new THREE.MeshBasicMaterial({ color: 0xffe08a }));
 lamp.position.set(-1.4, 3.8, 1.6);
@@ -560,8 +721,6 @@ fetch('/api/islands')
 // ---------- Walkable ground (for the explorer) ----------
 const SOLIDS = [
     { x: -6, z: -33, r: 0.6 }, { x: 5, z: -35, r: 0.6 }, { x: -2, z: -38, r: 0.6 }, // palms
-    { x: -0.9, z: -11.6, r: 0.65 }, { x: 0.2, z: -12.2, r: 0.55 },                  // crates
-    { x: 1.0, z: -11.8, r: 0.5 },                                                   // barrel
     { x: 3.2, z: -16, r: 0.35 }, { x: -1.4, z: 1.6, r: 0.2 },                       // sign, lantern
     { x: 1.45, z: BERTH.z + 2.6, r: 0.3 }, { x: 1.45, z: BERTH.z - 2.6, r: 0.3 },   // bollards
 ];
@@ -594,6 +753,14 @@ function groundHeight(x, z) {
         else if (z >= PIER.z0 - 1 && z < PIER.z0) take(1.67);
         else if (z >= PIER.z0 - 2 && z < PIER.z0 - 1) take(1.84);
     }
+    // Stand on top of crates if high enough
+    for (const prop of dynamicProps) {
+        if (Math.hypot(x - prop.x, z - prop.z) < prop.radius) {
+            const topY = prop.y + prop.h / 2;
+            if (manY >= topY - 0.25) take(topY);
+        }
+    }
+
     if (best === null) return null;
     for (const s of SOLIDS) if (Math.hypot(x - s.x, z - s.z) < s.r) return null;
     if (x > -8.2 && x < -3.8 && z > -25.7 && z < -22.3) return null; // harbor house
@@ -796,6 +963,11 @@ addEventListener('keydown', (e) => {
         if (!e.repeat) handleE();
         return;
     }
+    if (e.code === 'KeyR' && mode === 'onfoot') {
+        resetProps();
+        toast('Boxes reset!');
+        return;
+    }
     if (GAME_CODES.includes(e.code)) {
         e.preventDefault();
         keys[e.code] = true;
@@ -891,6 +1063,22 @@ function resolveCollisions() {
         else p.z = PIER.z1 + m;
         speed *= 0.3;
     }
+
+    for (const prop of dynamicProps) {
+        if (prop.floating) {
+            const dx = prop.x - p.x, dz = prop.z - p.z;
+            const dist = Math.hypot(dx, dz) || 0.001;
+            const r = BOAT_RADIUS + prop.radius;
+            if (dist < r) {
+                const push = r - dist;
+                prop.x += (dx / dist) * push;
+                prop.z += (dz / dist) * push;
+                const sp = Math.max(2.5, Math.abs(speed) + 2);
+                prop.vx += (dx / dist) * sp;
+                prop.vz += (dz / dist) * sp;
+            }
+        }
+    }
 }
 
 // ---------- Explorer updates ----------
@@ -953,6 +1141,280 @@ function updateBoard(dt) {
     manMoving = false;
 }
 
+function handlePlayerPropCollision(dt, mx, mz, isMoving) {
+    const p = manGroup.position;
+    const PLAYER_R = 0.28;
+
+    for (const prop of dynamicProps) {
+        const topY = prop.y + prop.h / 2;
+        const botY = prop.y - prop.h / 2;
+
+        // If standing on top of crate, don't push side
+        if (manY >= topY - 0.2) continue;
+        // If completely above or below crate vertically
+        if (manY + 0.85 < botY || manY > topY + 0.2) continue;
+
+        const dx = prop.x - p.x;
+        const dz = prop.z - p.z;
+        const dist = Math.hypot(dx, dz);
+        const minDist = PLAYER_R + prop.radius;
+
+        if (dist < minDist && dist > 0.0001) {
+            const pen = minDist - dist;
+            const nx = dx / dist;
+            const nz = dz / dist;
+
+            // If top box hit directly
+            if (prop.restingOn) {
+                prop.restingOn = null;
+                prop.vx += (nx * 3.8 + (Math.random() - 0.5) * 1.5) / prop.mass;
+                prop.vz += (nz * 3.8 + (Math.random() - 0.5) * 1.5) / prop.mass;
+                prop.vy = 2.2;
+                prop.vRotX = (Math.random() - 0.5) * 6;
+                prop.vRotZ = (Math.random() - 0.5) * 6;
+                prop.vRotY = (Math.random() - 0.5) * 5;
+                spawnParticles(prop.x, prop.y, prop.z, 6, false);
+            }
+
+            // If bottom box hit, knock off the top box!
+            for (const other of dynamicProps) {
+                if (other.restingOn === prop) {
+                    other.restingOn = null;
+                    other.vx = prop.vx * 0.7 + (nx + (Math.random() - 0.5) * 0.8) * 2.5;
+                    other.vz = prop.vz * 0.7 + (nz + (Math.random() - 0.5) * 0.8) * 2.5;
+                    other.vy = 2.4;
+                    other.vRotX = (Math.random() - 0.5) * 7;
+                    other.vRotZ = (Math.random() - 0.5) * 7;
+                    other.vRotY = (Math.random() - 0.5) * 5;
+                    spawnParticles(other.x, other.y, other.z, 6, false);
+                }
+            }
+
+            // Separate player and prop
+            const pushRatio = 0.82;
+            prop.x += nx * pen * pushRatio;
+            prop.z += nz * pen * pushRatio;
+            p.x -= nx * pen * (1 - pushRatio);
+            p.z -= nz * pen * (1 - pushRatio);
+
+            // Crash impulse
+            const hitSpeed = isMoving ? 4.5 : 2.0;
+            const impulse = hitSpeed / prop.mass;
+            prop.vx += nx * impulse;
+            prop.vz += nz * impulse;
+
+            const spd = Math.hypot(prop.vx, prop.vz);
+            if (spd > 5.5) {
+                prop.vx = (prop.vx / spd) * 5.5;
+                prop.vz = (prop.vz / spd) * 5.5;
+            }
+
+            // Angular wobble
+            prop.vRotY += (Math.random() - 0.5) * 3.0;
+            prop.vRotX += nz * 2.2;
+            prop.vRotZ += -nx * 2.2;
+
+            if (isMoving && spd > 1.2 && Math.random() < 0.4) {
+                spawnParticles(prop.x, prop.y - prop.h * 0.35, prop.z, 3, false);
+            }
+        }
+    }
+}
+
+function updateDynamicProps(dt, t) {
+    // 1. Follow parent if restingOn
+    for (const prop of dynamicProps) {
+        if (prop.restingOn) {
+            const base = prop.restingOn;
+            const distFromBase = Math.hypot(prop.x - base.x, prop.z - base.z);
+            const baseSpd = Math.hypot(base.vx, base.vz);
+            if (distFromBase > 0.3 || baseSpd > 1.2) {
+                prop.restingOn = null;
+                prop.vx = base.vx + (Math.random() - 0.5) * 1.0;
+                prop.vz = base.vz + (Math.random() - 0.5) * 1.0;
+                prop.vy = 1.5;
+                prop.vRotX = (Math.random() - 0.5) * 5;
+                prop.vRotZ = (Math.random() - 0.5) * 5;
+            } else {
+                prop.x = base.x;
+                prop.z = base.z;
+                prop.y = base.y + base.h / 2 + prop.h / 2;
+                prop.rotY = base.rotY;
+                prop.rotX = base.rotX;
+                prop.rotZ = base.rotZ;
+                prop.mesh.position.set(prop.x, prop.y, prop.z);
+                prop.mesh.rotation.set(prop.rotX, prop.rotY, prop.rotZ);
+            }
+        }
+    }
+
+    // 2. Velocity integration & Surface physics
+    for (const prop of dynamicProps) {
+        if (prop.restingOn) continue;
+
+        prop.x += prop.vx * dt;
+        prop.z += prop.vz * dt;
+
+        const surf = getPropSurface(prop.x, prop.z, t);
+
+        if (surf.isWater) {
+            const targetY = surf.height + prop.h * 0.25;
+            if (prop.y > targetY + 0.1) {
+                // Falling into water
+                prop.vy -= 18 * dt;
+                prop.y += prop.vy * dt;
+                prop.rotX += prop.vRotX * dt;
+                prop.rotZ += prop.vRotZ * dt;
+                prop.rotY += prop.vRotY * dt;
+                if (prop.y <= targetY) {
+                    if (!prop.floating) {
+                        prop.floating = true;
+                        spawnParticles(prop.x, surf.height, prop.z, 10, true);
+                    }
+                }
+            } else {
+                // Floating in water
+                if (!prop.floating) {
+                    prop.floating = true;
+                    spawnParticles(prop.x, surf.height, prop.z, 8, true);
+                }
+                const diff = targetY - prop.y;
+                prop.vy += diff * 22 * dt;
+                prop.vy *= Math.exp(-3.5 * dt);
+                prop.y += prop.vy * dt;
+
+                prop.vx *= Math.exp(-2.5 * dt);
+                prop.vz *= Math.exp(-2.5 * dt);
+                prop.vRotY *= Math.exp(-2 * dt);
+                prop.rotY += prop.vRotY * dt;
+
+                prop.rotX += (Math.sin(t * 2.5 + prop.x * 2) * 0.15 - prop.rotX) * Math.min(1, 5 * dt);
+                prop.rotZ += (Math.cos(t * 2.2 + prop.z * 2) * 0.15 - prop.rotZ) * Math.min(1, 5 * dt);
+            }
+        } else {
+            // On solid ground (pier deck or shore)
+            prop.floating = false;
+            const targetGroundY = surf.height + prop.h / 2;
+
+            if (prop.y > targetGroundY + 0.02) {
+                // Falling in air
+                prop.vy -= 18 * dt;
+                prop.y += prop.vy * dt;
+                prop.grounded = false;
+
+                prop.rotX += prop.vRotX * dt;
+                prop.rotY += prop.vRotY * dt;
+                prop.rotZ += prop.vRotZ * dt;
+
+                if (prop.y <= targetGroundY) {
+                    prop.y = targetGroundY;
+                    if (prop.vy < -2.0) {
+                        prop.vy = -prop.vy * 0.25;
+                        spawnParticles(prop.x, targetGroundY - prop.h * 0.4, prop.z, 4, false);
+                    } else {
+                        prop.vy = 0;
+                        prop.grounded = true;
+                    }
+                }
+            } else {
+                // Resting on ground
+                prop.y = targetGroundY;
+                prop.vy = 0;
+                prop.grounded = true;
+
+                prop.vx *= Math.exp(-4.8 * dt);
+                prop.vz *= Math.exp(-4.8 * dt);
+                if (Math.hypot(prop.vx, prop.vz) < 0.02) {
+                    prop.vx = 0;
+                    prop.vz = 0;
+                }
+
+                prop.vRotY *= Math.exp(-5 * dt);
+                prop.rotY += prop.vRotY * dt;
+                prop.vRotX *= Math.exp(-8 * dt);
+                prop.vRotZ *= Math.exp(-8 * dt);
+                prop.rotX += (0 - prop.rotX) * Math.min(1, 10 * dt);
+                prop.rotZ += (0 - prop.rotZ) * Math.min(1, 10 * dt);
+            }
+        }
+
+        if (prop.y < -8 || Math.hypot(prop.x, prop.z) > 120) {
+            resetProps();
+        }
+    }
+
+    // 3. Prop vs Prop collision
+    for (let i = 0; i < dynamicProps.length; i++) {
+        for (let j = i + 1; j < dynamicProps.length; j++) {
+            const a = dynamicProps[i], b = dynamicProps[j];
+            if (a.restingOn === b || b.restingOn === a) continue;
+
+            const aBot = a.y - a.h / 2, aTop = a.y + a.h / 2;
+            const bBot = b.y - b.h / 2, bTop = b.y + b.h / 2;
+            if (aBot > bTop || aTop < bBot) continue;
+
+            const dx = b.x - a.x, dz = b.z - a.z;
+            const dist = Math.hypot(dx, dz);
+            const minDist = a.radius + b.radius;
+            if (dist < minDist && dist > 0.0001) {
+                const pen = minDist - dist;
+                const nx = dx / dist, nz = dz / dist;
+                const totalMass = a.mass + b.mass;
+                const aShare = b.mass / totalMass;
+                const bShare = a.mass / totalMass;
+
+                a.x -= nx * pen * aShare;
+                a.z -= nz * pen * aShare;
+                b.x += nx * pen * bShare;
+                b.z += nz * pen * bShare;
+
+                const relV = (a.vx - b.vx) * nx + (a.vz - b.vz) * nz;
+                if (relV > 0) {
+                    const imp = relV * 0.7;
+                    a.vx -= imp * nx * aShare;
+                    a.vz -= imp * nz * aShare;
+                    b.vx += imp * nx * bShare;
+                    b.vz += imp * nz * bShare;
+                    a.vRotY += (Math.random() - 0.5) * 1.5;
+                    b.vRotY += (Math.random() - 0.5) * 1.5;
+                }
+            }
+        }
+    }
+
+    // 4. Prop vs Static Obstacles
+    for (const prop of dynamicProps) {
+        if (prop.restingOn) continue;
+        for (const s of SOLIDS) {
+            const dx = prop.x - s.x, dz = prop.z - s.z;
+            const dist = Math.hypot(dx, dz);
+            const minDist = prop.radius + s.r;
+            if (dist < minDist && dist > 0.0001) {
+                const pen = minDist - dist;
+                const nx = dx / dist, nz = dz / dist;
+                prop.x += nx * pen;
+                prop.z += nz * pen;
+                const dot = prop.vx * nx + prop.vz * nz;
+                if (dot < 0) {
+                    prop.vx -= 1.3 * dot * nx;
+                    prop.vz -= 1.3 * dot * nz;
+                }
+            }
+        }
+        if (prop.x > -8.2 - prop.radius && prop.x < -3.8 + prop.radius &&
+            prop.z > -25.7 - prop.radius && prop.z < -22.3 + prop.radius) {
+            prop.z = -22.3 + prop.radius;
+            prop.vz = Math.max(0, prop.vz);
+        }
+    }
+
+    // 5. Update Meshes
+    for (const prop of dynamicProps) {
+        prop.mesh.position.set(prop.x, prop.y, prop.z);
+        prop.mesh.rotation.set(prop.rotX, prop.rotY, prop.rotZ);
+    }
+}
+
 function tryMove(dx, dz) {
     const p = manGroup.position;
     const nx = p.x + dx, nz = p.z + dz;
@@ -978,6 +1440,7 @@ function updateMan(dt) {
         const face = Math.atan2(mx, mz);
         manGroup.rotation.y += wrapPI(face - manGroup.rotation.y) * Math.min(1, 12 * dt);
     }
+    handlePlayerPropCollision(dt, mx, mz, manMoving);
 
     const p = manGroup.position;
     const gh = groundHeight(p.x, p.z);
@@ -1081,6 +1544,8 @@ function animate() {
         else if (mode === 'onfoot') updateMan(dt);
         else if (mode === 'boarding') updateBoard(dt);
         if (mode !== 'ship') animateLimbs(dt);
+        updateDynamicProps(dt, t);
+        updateParticles(dt);
 
         // ---- treasure chests ----
         chests.forEach((c) => {
