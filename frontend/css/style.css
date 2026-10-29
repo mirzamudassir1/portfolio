@@ -1,17 +1,37 @@
+html,
 body {
     margin: 0;
+    height: 100%;
     overflow: hidden;
     font-family: 'Segoe UI', sans-serif;
+    background: #87ceeb;
+}
+
+canvas {
+    display: block;
 }
 
 #hint {
     display: none;
 }
 
+#adminBtn {
+    position: fixed;
+    top: 12px;
+    right: 20px;
+    z-index: 6;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 8px;
+    background: #ffd166;
+    font-weight: 600;
+    cursor: pointer;
+}
+
 #panel {
     position: fixed;
     right: 20px;
-    top: 20px;
+    top: 64px;
     width: 320px;
     display: none;
     background: #0b1d33ee;
@@ -60,4 +80,109 @@ body {
 #status {
     margin-top: 6px;
     font-size: 14px;
+}
+
+/* ---------- Admin modal ---------- */
+#adminModal {
+    position: fixed;
+    inset: 0;
+    background: #000a;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+}
+
+#adminModal .box {
+    position: relative;
+    background: #0b1d33;
+    color: #fff;
+    padding: 22px;
+    width: min(540px, 92vw);
+    max-height: 88vh;
+    overflow: auto;
+    border-radius: 12px;
+}
+
+#adminModal h2 {
+    margin: 0 0 12px;
+    color: #ffd166;
+}
+
+#adminModal label {
+    display: block;
+    margin-top: 10px;
+    font-size: 13px;
+    color: #9cc;
+}
+
+#adminModal input,
+#adminModal textarea {
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 4px;
+    padding: 8px;
+    border: none;
+    border-radius: 6px;
+    font-family: inherit;
+}
+
+#adminModal button {
+    padding: 7px 14px;
+    border: none;
+    border-radius: 6px;
+    background: #ffd166;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+#adminModal .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+#adminModal .tabs button {
+    background: #1d3b5e;
+    color: #fff;
+}
+
+#adminModal .tabs button.on {
+    background: #ffd166;
+    color: #000;
+}
+
+#adminModal .close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: #e74c3c;
+    color: #fff;
+}
+
+#adminModal .save {
+    margin-top: 14px;
+}
+
+#adminModal .st {
+    margin-top: 8px;
+    font-size: 14px;
+    color: #7dd3fc;
+}
+
+#adminModal form button {
+    margin-top: 10px;
+}
+
+#adminModal .msg {
+    background: #12304f;
+    padding: 10px;
+    border-radius: 8px;
+    margin-top: 8px;
+}
+
+#adminModal .msg p {
+    margin: 6px 0 0;
+    white-space: pre-wrap;
 }

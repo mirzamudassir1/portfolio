@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const connectDB = require('./config/db');
 
 const app = express();
@@ -14,7 +15,10 @@ app.use('/api/islands', require('./routes/islands'));
 app.use('/api/contact', require('./routes/contact'));
 
 // Serve the frontend
-app.use(express.static(path.join(__dirname, '..', 'fontend')));
+const frontendDir = path.join(__dirname, '..', 'frontend');
+console.log('Serving frontend from:', frontendDir);
+console.log('index.html found:', fs.existsSync(path.join(frontendDir, 'index.html')));
+app.use(express.static(frontendDir));
 
 const PORT = process.env.PORT || 5000;
 
