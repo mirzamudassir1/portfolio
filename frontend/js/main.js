@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { buildThemedIsland } from './islands/index.js';
 
 function toast(text) {
     const d = document.createElement('div');
@@ -530,21 +531,168 @@ function resetProps() {
         prop.mesh.rotation.set(0, 0, 0);
     }
     crateStackTop.restingOn = crateStackBottom;
+    if (typeof topHarborProps !== 'undefined') {
+        for (const top of topHarborProps) {
+            top.restingOn = top._origRestingOn;
+        }
+    }
 }
 hcyl(0.07, 0.07, 2.2, 0x2b1e18, -1.4, 2.6, 1.6, 8);
 const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 12), new THREE.MeshBasicMaterial({ color: 0xffe08a }));
 lamp.position.set(-1.4, 3.8, 1.6);
 harbor.add(lamp);
 
-// harbor sign
-hcyl(0.1, 0.1, 2.4, 0x5a3a20, 3.2, 3.2, -16, 8);
-hbox(3.4, 1.1, 0.12, 0x4a2c14, 3.2, 4.0, -16.02);
-const sign = new THREE.Mesh(
-    new THREE.PlaneGeometry(3.2, 0.9),
-    new THREE.MeshBasicMaterial({ map: signTexture() })
-);
-sign.position.set(3.2, 4.0, -15.95);
-harbor.add(sign);
+// ---------- 3D Scramble Blocks for "MUDASSIR'S HARBOUR" ----------
+function makeLetterTexture(char, isTop) {
+    const c = document.createElement('canvas');
+    c.width = 256;
+    c.height = 256;
+    const g = c.getContext('2d');
+
+    // Base colors: Top row is warm golden cedar; bottom row is rich pirate mahogany
+    const baseColor = isTop ? '#c9823b' : '#944b26';
+    const darkWood = isTop ? '#5a2d0c' : '#451a05';
+    const textColor = isTop ? '#fffdf0' : '#ffe9b0';
+    const highlight = 'rgba(255,255,255,0.22)';
+
+    g.fillStyle = baseColor;
+    g.fillRect(0, 0, 256, 256);
+
+    // Wood plank lines
+    g.fillStyle = 'rgba(0,0,0,0.09)';
+    g.fillRect(0, 60, 256, 6);
+    g.fillRect(0, 130, 256, 6);
+    g.fillRect(0, 196, 256, 6);
+
+    // Dark outer border / frame
+    g.strokeStyle = darkWood;
+    g.lineWidth = 18;
+    g.strokeRect(9, 9, 238, 238);
+
+    // Inner highlight rim
+    g.strokeStyle = highlight;
+    g.lineWidth = 6;
+    g.strokeRect(20, 20, 216, 216);
+
+    // Corner brass nails / rivets
+    g.fillStyle = '#f0c14b';
+    [
+        [28, 28], [228, 28], [28, 228], [228, 228]
+    ].forEach(([cx, cy]) => {
+        g.beginPath();
+        g.arc(cx, cy, 6, 0, Math.PI * 2);
+        g.fill();
+        g.strokeStyle = 'rgba(0,0,0,0.4)';
+        g.lineWidth = 2;
+        g.stroke();
+    });
+
+    if (char === 'CRATE') {
+        // Cargo crate cross braces (X)
+        g.strokeStyle = darkWood;
+        g.lineWidth = 14;
+        g.beginPath();
+        g.moveTo(28, 28); g.lineTo(228, 228);
+        g.moveTo(228, 28); g.lineTo(28, 228);
+        g.stroke();
+        // Center metal badge
+        g.fillStyle = '#f0c14b';
+        g.fillRect(108, 108, 40, 40);
+        g.strokeStyle = darkWood;
+        g.lineWidth = 4;
+        g.strokeRect(108, 108, 40, 40);
+    } else {
+        // Draw the letter!
+        g.font = '900 144px "Impact", "Segoe UI Black", sans-serif';
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+
+        // 3D Drop shadow
+        g.fillStyle = 'rgba(0,0,0,0.55)';
+        g.fillText(char, 132, 136);
+
+        // Letter face
+        g.fillStyle = textColor;
+        g.fillText(char, 128, 128);
+
+        // Dark outline
+        g.strokeStyle = darkWood;
+        g.lineWidth = 6;
+        g.strokeText(char, 128, 128);
+    }
+
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+}
+
+const B_SIZE = 0.48;
+const B_GAP = 0.04;
+const bStep = B_SIZE + B_GAP;
+const bGeo = new THREE.BoxGeometry(B_SIZE, B_SIZE, B_SIZE);
+
+function createLetterBlock({ char, x, y, z, isTop, id }) {
+    const tex = makeLetterTexture(char, isTop);
+    const m = new THREE.Mesh(bGeo, new THREE.MeshPhongMaterial({ map: tex, flatShading: true }));
+    m.position.set(x, y, z);
+    scene.add(m);
+    const prop = {
+        id,
+        isHarborBlock: true,
+        type: 'block',
+        char,
+        mesh: m,
+        w: B_SIZE, h: B_SIZE, d: B_SIZE,
+        radius: B_SIZE * 0.58,
+        mass: 0.75,
+        x, y, z,
+        origX: x, origY: y, origZ: z,
+        vx: 0, vy: 0, vz: 0,
+        rotX: 0, rotY: 0, rotZ: 0,
+        vRotX: 0, vRotY: 0, vRotZ: 0,
+        grounded: true,
+        floating: false,
+        restingOn: null,
+    };
+    dynamicProps.push(prop);
+    return prop;
+}
+
+const harborCenter = { x: 2.6, z: -16.2 };
+const topChars = ['M', 'U', 'D', 'A', 'S', 'S', 'I', 'R', "'", 'S'];
+const botChars = ['CRATE', 'H', 'A', 'R', 'B', 'O', 'U', 'R', 'CRATE'];
+
+const botWidth = botChars.length * B_SIZE + (botChars.length - 1) * B_GAP;
+const topWidth = topChars.length * B_SIZE + (topChars.length - 1) * B_GAP;
+
+const bottomHarborProps = [];
+const startX_bot = harborCenter.x - (botWidth / 2) + B_SIZE / 2;
+botChars.forEach((ch, i) => {
+    const bx = startX_bot + i * bStep;
+    const bz = harborCenter.z;
+    const groundY = getPropSurface(bx, bz, 0).height;
+    const by = groundY + B_SIZE / 2;
+    const p = createLetterBlock({ char: ch, x: bx, y: by, z: bz, isTop: false, id: `harbor_bot_${i}_${ch}` });
+    bottomHarborProps.push(p);
+});
+
+const topHarborProps = [];
+const startX_top = harborCenter.x - (topWidth / 2) + B_SIZE / 2;
+topChars.forEach((ch, j) => {
+    const tx = startX_top + j * bStep;
+    const tz = harborCenter.z;
+    const groundY = getPropSurface(tx, tz, 0).height;
+    const ty = groundY + B_SIZE + B_SIZE / 2;
+    const p = createLetterBlock({ char: ch, x: tx, y: ty, z: tz, isTop: true, id: `harbor_top_${j}_${ch}` });
+    let closest = null, minD = 999;
+    for (const b of bottomHarborProps) {
+        const d = Math.abs(b.x - tx);
+        if (d < minD) { minD = d; closest = b; }
+    }
+    p.restingOn = closest;
+    p._origRestingOn = closest;
+    topHarborProps.push(p);
+});
 
 // gangplank (pier -> ship deck), lifts away when the ship leaves
 const plankMat = new THREE.MeshPhongMaterial({ color: 0xc28a52, transparent: true });
@@ -648,31 +796,30 @@ function makeLabel(text) {
     return s;
 }
 
+// each island's scenery lives in its own file (frontend/js/islands/*.js)
+const islandAnimators = [];
 function buildIsland(d) {
-    const g = new THREE.Group();
-    g.position.set(d.x, 0, d.z);
-    const r = d.radius;
-    const mesh = (geo, color, y) => {
-        const m = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color }));
-        m.position.y = y;
-        g.add(m);
-    };
-    mesh(new THREE.CylinderGeometry(r * 0.9, r, 3, 28), d.color, 0.5);
-    mesh(new THREE.CylinderGeometry(r * 0.62, r * 0.75, 1.5, 28), 0x2ecc71, 2.2);
-    mesh(new THREE.CylinderGeometry(0.3, 0.45, 6, 8), 0x8b5a2b, 5.5); // trunk
-    mesh(new THREE.ConeGeometry(3, 2.5, 8), 0x27ae60, 9.2);          // leaves
-    const label = makeLabel(d.name);
-    label.position.y = 15;
-    g.add(label);
-    scene.add(g);
+    const t = buildThemedIsland(d, makeLabel);
+    scene.add(t.group);
+    d._solids = t.solids;
+    if (t.update) islandAnimators.push(t.update);
 }
 
 // treasure chests (open when the explorer walks up to them)
 const chests = [];
 function buildChest(d, i) {
-    const th = i * 2.1 + 0.6;
-    const cx = d.x + Math.cos(th) * d.radius * 0.5;
-    const cz = d.z + Math.sin(th) * d.radius * 0.5;
+    // pick a free spot on the plateau (not inside a building, tree or platform)
+    let th = i * 2.1 + 0.6, cx = d.x, cz = d.z;
+    for (let k = 0; k < 24; k++) {
+        const f = 0.5 + (k % 3) * 0.04;
+        cx = d.x + Math.cos(th) * d.radius * f;
+        cz = d.z + Math.sin(th) * d.radius * f;
+        const blocked = (d._solids || []).some(
+            (s) => Math.hypot(cx - d.x - s.x, cz - d.z - s.z) < s.r + 1.0
+        );
+        if (!blocked) break;
+        th += 0.5;
+    }
     d._chest = { x: cx, z: cz };
 
     const g = new THREE.Group();
@@ -721,7 +868,7 @@ fetch('/api/islands')
 // ---------- Walkable ground (for the explorer) ----------
 const SOLIDS = [
     { x: -6, z: -33, r: 0.6 }, { x: 5, z: -35, r: 0.6 }, { x: -2, z: -38, r: 0.6 }, // palms
-    { x: 3.2, z: -16, r: 0.35 }, { x: -1.4, z: 1.6, r: 0.2 },                       // sign, lantern
+    { x: -1.4, z: 1.6, r: 0.2 },                                                     // lantern
     { x: 1.45, z: BERTH.z + 2.6, r: 0.3 }, { x: 1.45, z: BERTH.z - 2.6, r: 0.3 },   // bollards
 ];
 
@@ -740,9 +887,15 @@ function groundHeight(x, z) {
     for (const d of islands) {
         const dist = Math.hypot(x - d.x, z - d.z);
         if (dist < d.radius * 0.94) {
-            if (dist < 0.8) return null; // palm trunk
             if (d._chest && Math.hypot(x - d._chest.x, z - d._chest.z) < 0.75) return null;
-            take(islandSurface(dist, d.radius));
+            let lift = 0;
+            for (const s of d._solids || []) {
+                if (Math.hypot(x - d.x - s.x, z - d.z - s.z) < s.r) {
+                    if (s.h) lift = Math.max(lift, s.h); // walkable platform (academy steps)
+                    else return null;                      // solid object (trees, houses...)
+                }
+            }
+            take(islandSurface(dist, d.radius) + lift);
         }
     }
     const hd = Math.hypot(x - HARBOR.x, z - HARBOR.z);
@@ -965,7 +1118,7 @@ addEventListener('keydown', (e) => {
     }
     if (e.code === 'KeyR' && mode === 'onfoot') {
         resetProps();
-        toast('Boxes reset!');
+        toast('Harbor blocks & crates reset!');
         return;
     }
     if (GAME_CODES.includes(e.code)) {
@@ -1187,6 +1340,40 @@ function handlePlayerPropCollision(dt, mx, mz, isMoving) {
                     other.vRotZ = (Math.random() - 0.5) * 7;
                     other.vRotY = (Math.random() - 0.5) * 5;
                     spawnParticles(other.x, other.y, other.z, 6, false);
+                }
+            }
+
+            // Scramble chain-reaction when crashing into the 3D harbor letter blocks!
+            if (prop.isHarborBlock) {
+                prop.restingOn = null;
+                const hitPower = isMoving ? 6.2 : 3.5;
+                prop.vx += (nx * hitPower + (Math.random() - 0.5) * 2.5) / prop.mass;
+                prop.vz += (nz * hitPower + (Math.random() - 0.5) * 2.5) / prop.mass;
+                prop.vy = 2.4 + Math.random() * 1.6;
+                prop.vRotX = (Math.random() - 0.5) * 8;
+                prop.vRotZ = (Math.random() - 0.5) * 8;
+                prop.vRotY = (Math.random() - 0.5) * 6;
+                spawnParticles(prop.x, prop.y, prop.z, 8, false);
+
+                // Shockwave blast that scatters neighboring blocks in the sign
+                for (const other of dynamicProps) {
+                    if (other.isHarborBlock && other !== prop) {
+                        const distToHit = Math.hypot(other.x - prop.x, other.z - prop.z);
+                        if (distToHit < 2.4) {
+                            other.restingOn = null;
+                            const spreadX = (other.x - prop.x) || (Math.random() - 0.5);
+                            const spreadZ = (other.z - prop.z) || (Math.random() - 0.5);
+                            const slen = Math.hypot(spreadX, spreadZ) || 1;
+                            const blast = Math.max(0, 2.4 - distToHit) * 2.5 + 1.2;
+                            other.vx += (spreadX / slen) * blast + nx * 2.2;
+                            other.vz += (spreadZ / slen) * blast + nz * 2.2;
+                            other.vy += 1.5 + blast * 0.5 + Math.random() * 1.0;
+                            other.vRotX = (Math.random() - 0.5) * 7;
+                            other.vRotZ = (Math.random() - 0.5) * 7;
+                            other.vRotY = (Math.random() - 0.5) * 5;
+                            spawnParticles(other.x, other.y, other.z, 3, false);
+                        }
+                    }
                 }
             }
 
@@ -1525,6 +1712,9 @@ function animate() {
         boat.rotation.set(Math.sin(t * 1.2) * 0.02, heading, Math.sin(t * 1.5) * 0.04);
         boat.updateMatrixWorld(true);
         flagPivot.rotation.y = Math.sin(t * 3) * 0.3;
+
+        // ---- animated island scenery (lighthouse beam, crane, volcano, clock...) ----
+        islandAnimators.forEach((fn) => fn(t));
 
         // ---- ropes + gangplank (fade in/out) ----
         const step = Math.min(Math.abs(moorTarget - moor), dt / 0.8);

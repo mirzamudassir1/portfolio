@@ -1,37 +1,20 @@
-const express = require('express');
-const Island = require('../models/Island');
-const auth = require('../middleware/auth');
+const mongoose = require('mongoose');
 
-const router = express.Router();
+const linkSchema = new mongoose.Schema({
+    label: { type: String, required: true },
+    url: { type: String, required: true },
+}, { _id: false });
 
-router.get('/', async (req, res) => {
-    try {
-        res.json(await Island.find().lean());
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
+const islandSchema = new mongoose.Schema({
+    name: { type: String, required: true },
+    type: { type: String, required: true },
+    x: { type: Number, required: true },
+    z: { type: Number, required: true },
+    radius: { type: Number, default: 12 },
+    color: { type: String, default: '#f4d03f' },
+    title: { type: String, required: true },
+    lines: [{ type: String }],
+    links: [linkSchema],
+}, { timestamps: true });
 
-router.put('/:id', auth, async (req, res) => {
-    try {
-        const { name, title, lines, links, x, z } = req.body;
-        const update = {};
-        if (typeof name === 'string') update.name = name;
-        if (typeof title === 'string') update.title = title;
-        if (Array.isArray(lines)) update.lines = lines.map(String);
-        if (Array.isArray(links))
-            update.links = links
-                .filter((l) => l && /^(https?:|mailto:)/i.test(l.url))
-                .map((l) => ({ label: String(l.label), url: String(l.url) }));
-        if (Number.isFinite(x)) update.x = x;
-        if (Number.isFinite(z)) update.z = z;
-
-        const island = await Island.findByIdAndUpdate(req.params.id, update, { new: true });
-        if (!island) return res.status(404).json({ error: 'Island not found' });
-        res.json(island);
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-module.exports = router;
+module.exports = mongoose.model('Island', islandSchema);
