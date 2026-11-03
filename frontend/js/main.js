@@ -34,15 +34,68 @@ const sun = new THREE.DirectionalLight(0xfff2d6, 0.9);
 sun.position.set(-80, 160, -60);
 scene.add(sun);
 
-// ---------- Water ----------
+// ---------- Water & Ocean Waves System ----------
+function getWaveHeight(x, z, t) {
+    // Primary rolling ocean swell
+    const w1 = Math.sin(x * 0.045 + z * 0.035 + t * 1.5) * 0.58;
+    // Diagonal cross-swell creating natural wave peaks
+    const w2 = Math.cos(x * 0.038 - z * 0.046 + t * 1.25) * 0.44;
+    // High-frequency ocean chop
+    const w3 = Math.sin(x * 0.11 - t * 2.1) * Math.cos(z * 0.11 + t * 1.7) * 0.22;
+    // Crisp surface ripples
+    const w4 = Math.sin((x + z) * 0.18 + t * 2.8) * 0.08;
+    return w1 + w2 + w3 + w4;
+}
+
 const wGeo = new THREE.PlaneGeometry(1400, 1400, 110, 110);
 wGeo.rotateX(-Math.PI / 2);
+const wPos = wGeo.attributes.position;
+
+// Vertex color buffer for dynamic wave crest whitecaps & deep ocean shading
+const wColors = new Float32Array(wPos.count * 3);
+wGeo.setAttribute('color', new THREE.BufferAttribute(wColors, 3));
+
 const water = new THREE.Mesh(
     wGeo,
-    new THREE.MeshPhongMaterial({ color: 0x1e90ff, flatShading: true, shininess: 80 })
+    new THREE.MeshPhongMaterial({
+        vertexColors: true,
+        flatShading: true,
+        shininess: 95,
+        specular: 0x90e0ef,
+        transparent: true,
+        opacity: 0.94,
+    })
 );
 scene.add(water);
-const wPos = wGeo.attributes.position;
+
+// Island & harbor shoreline surf rings (waves washing onto sand)
+const shoreSurfs = [];
+const shoreRingGeo = new THREE.RingGeometry(0.88, 1.12, 36);
+shoreRingGeo.rotateX(-Math.PI / 2);
+
+function addShoreSurf(cx, cz, baseRadius) {
+    for (let layer = 0; layer < 2; layer++) {
+        const ringMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.45,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+        });
+        const mesh = new THREE.Mesh(shoreRingGeo, ringMat);
+        mesh.position.set(cx, 0.08 + layer * 0.02, cz);
+        mesh.scale.setScalar(baseRadius);
+        scene.add(mesh);
+        shoreSurfs.push({
+            mesh,
+            baseRadius,
+            cx, cz,
+            phase: layer * Math.PI,
+        });
+    }
+}
+
+// (Ship white water wake trails removed)
 
 // ---------- Ship (pirate galleon) ----------
 const SHIP_SCALE = 0.5; // make the ship bigger or smaller here
@@ -513,7 +566,7 @@ function getPropSurface(x, z, time) {
             return { height: h, isWater: false };
         }
     }
-    const waveY = Math.sin(x * 0.06 + time) * 0.5 + Math.cos(z * 0.05 + time * 0.8) * 0.5;
+    const waveY = getWaveHeight(x, z, time);
     return { height: waveY, isWater: true };
 }
 
@@ -537,6 +590,7 @@ function resetProps() {
         }
     }
 }
+addShoreSurf(HARBOR.x, HARBOR.z, HARBOR.r);
 hcyl(0.07, 0.07, 2.2, 0x2b1e18, -1.4, 2.6, 1.6, 8);
 const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 12), new THREE.MeshBasicMaterial({ color: 0xffe08a }));
 lamp.position.set(-1.4, 3.8, 1.6);
@@ -801,6 +855,7 @@ const islandAnimators = [];
 function buildIsland(d) {
     const t = buildThemedIsland(d, makeLabel);
     scene.add(t.group);
+    addShoreSurf(d.x, d.z, d.radius);
     d._solids = t.solids;
     if (t.update) islandAnimators.push(t.update);
 }
@@ -1106,43 +1161,36 @@ let nitroActive = false;
 let nitroBurstTimer = 0;
 let currentPitch = 0, currentBank = 0;
 
-// Nitro exhaust flames & water wake particles
+// Nitro exhaust flames
 const nitroParticles = [];
-const wakeGeo = new THREE.SphereGeometry(0.18, 8, 8);
 const flameGeo = new THREE.SphereGeometry(0.14, 6, 6);
-const wakeMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 });
 const flameMat = new THREE.MeshBasicMaterial({ color: 0xff8c00, transparent: true, opacity: 0.95 });
 const cyanMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.95 });
 
 function updateNitroEffects(dt, boosting) {
     if (boosting && mode === 'ship') {
-        const count = 4;
+        const count = 3;
         for (let i = 0; i < count; i++) {
-            const lx = (Math.random() - 0.5) * 1.8;
-            const ly = 0.2 + Math.random() * 0.4;
-            const lz = -5.0 - Math.random() * 0.9;
+            const lx = (Math.random() - 0.5) * 1.6;
+            const ly = 0.2 + Math.random() * 0.35;
+            const lz = -5.0 - Math.random() * 0.8;
             const worldPos = boat.localToWorld(new THREE.Vector3(lx, ly, lz));
 
-            const isFlame = Math.random() < 0.65;
-            const isCyan = Math.random() < 0.35;
-            const pMesh = new THREE.Mesh(
-                isFlame ? flameGeo : wakeGeo,
-                isFlame ? (isCyan ? cyanMat.clone() : flameMat.clone()) : wakeMat.clone()
-            );
+            const isCyan = Math.random() < 0.4;
+            const pMesh = new THREE.Mesh(flameGeo, isCyan ? cyanMat.clone() : flameMat.clone());
             pMesh.position.copy(worldPos);
             scene.add(pMesh);
 
             const kickSpeed = -speed * 0.55 - Math.random() * 6;
             const vx = Math.sin(heading) * kickSpeed + (Math.random() - 0.5) * 2;
             const vz = Math.cos(heading) * kickSpeed + (Math.random() - 0.5) * 2;
-            const vy = 0.4 + Math.random() * 1.6;
+            const vy = 0.4 + Math.random() * 1.5;
 
             nitroParticles.push({
                 mesh: pMesh,
                 vx, vy, vz,
-                life: 0.5 + Math.random() * 0.35,
-                maxLife: 0.5 + Math.random() * 0.35,
-                scaleGrow: !isFlame,
+                life: 0.45 + Math.random() * 0.25,
+                maxLife: 0.45 + Math.random() * 0.25,
             });
         }
     }
@@ -1162,12 +1210,8 @@ function updateNitroEffects(dt, boosting) {
         p.mesh.position.z += p.vz * dt;
 
         const prog = p.life / p.maxLife;
-        p.mesh.material.opacity = prog * 0.9;
-        if (p.scaleGrow) {
-            p.mesh.scale.setScalar((2.0 - prog) * 1.25);
-        } else {
-            p.mesh.scale.setScalar(prog * 1.5);
-        }
+        p.mesh.material.opacity = prog * 0.95;
+        p.mesh.scale.setScalar(prog * 1.4);
     }
 }
 
@@ -1763,13 +1807,49 @@ function animate() {
     const t = clock.elapsedTime;
 
     try {
-        // waves
+        // ---- Multi-Octave Ocean Waves with Whitecap Seafoam Crests ----
+        const deepR = 0.07, deepG = 0.32, deepB = 0.65;    // Deep ocean blue in troughs
+        const midR = 0.12, midG = 0.58, midB = 0.98;     // Tropical sapphire ocean body
+        const crestR = 0.92, crestG = 0.98, crestB = 1.0;  // Foam whitecaps on wave crests
+
         for (let i = 0; i < wPos.count; i++) {
             const x = wPos.getX(i), z = wPos.getZ(i);
-            wPos.setY(i, Math.sin(x * 0.06 + t) * 0.5 + Math.cos(z * 0.05 + t * 0.8) * 0.5);
+            const y = getWaveHeight(x, z, t);
+            wPos.setY(i, y);
+
+            // Dynamic wave coloring: Crests foam up white, troughs deepen
+            const idx = i * 3;
+            if (y > 0.42) {
+                // Wave crest seafoam
+                const f = Math.min(1.0, (y - 0.42) / 0.55);
+                wColors[idx] = midR + (crestR - midR) * f;
+                wColors[idx + 1] = midG + (crestG - midG) * f;
+                wColors[idx + 2] = midB + (crestB - midB) * f;
+            } else if (y < -0.25) {
+                // Wave trough deep blue
+                const d = Math.min(1.0, (-0.25 - y) / 0.65);
+                wColors[idx] = midR + (deepR - midR) * d;
+                wColors[idx + 1] = midG + (deepG - midG) * d;
+                wColors[idx + 2] = midB + (deepB - midB) * d;
+            } else {
+                wColors[idx] = midR;
+                wColors[idx + 1] = midG;
+                wColors[idx + 2] = midB;
+            }
         }
         wPos.needsUpdate = true;
+        wGeo.attributes.color.needsUpdate = true;
         wGeo.computeVertexNormals();
+
+        // Animate shoreline surf rings (waves washing up island shores)
+        for (let s of shoreSurfs) {
+            const p = (Math.sin(t * 1.8 + s.phase) + 1) * 0.5;
+            s.mesh.scale.setScalar(s.baseRadius * (0.96 + p * 0.08));
+            s.mesh.material.opacity = (1 - p) * 0.45;
+            s.mesh.position.y = 0.06 + Math.sin(t * 1.4) * 0.03;
+        }
+
+
 
         // ---- boat movement by state ----
         if (state === 'docked') {
@@ -1838,8 +1918,36 @@ function animate() {
         const targetBank = (isBoosting ? 0.16 : 0.05) * turnInput;
         currentBank += (targetBank - currentBank) * Math.min(1, 6 * dt);
 
-        boat.position.y = 0.4 + Math.sin(t * 2) * 0.12;
-        boat.rotation.set(Math.sin(t * 1.2) * 0.02 + currentPitch, heading, Math.sin(t * 1.5) * 0.04 + currentBank);
+        // Sample actual ocean wave elevation & slope under the ship
+        const boatWaveH = getWaveHeight(boat.position.x, boat.position.z, t);
+        const bowSample = boat.localToWorld(_a.set(0, 0, 3.2));
+        const sternSample = boat.localToWorld(_d.set(0, 0, -3.2));
+        const bowWaveH = getWaveHeight(bowSample.x, bowSample.z, t);
+        const sternWaveH = getWaveHeight(sternSample.x, sternSample.z, t);
+
+        const starSample = boat.localToWorld(_deck.set(1.8, 0, 0));
+        const portSample = boat.localToWorld(_a.set(-1.8, 0, 0));
+        const starWaveH = getWaveHeight(starSample.x, starSample.z, t);
+        const portWaveH = getWaveHeight(portSample.x, portSample.z, t);
+
+        const wavePitch = (bowWaveH - sternWaveH) * 0.09;
+        const waveRoll = (portWaveH - starWaveH) * 0.07;
+
+        if (state === 'docked' || state === 'docking') {
+            boat.position.y = 0.4 + Math.sin(t * 1.6) * 0.07;
+            boat.rotation.set(Math.sin(t * 1.1) * 0.015, heading, Math.sin(t * 1.4) * 0.025);
+        } else {
+            // Galleon actively rides the ocean swell!
+            const targetBoatY = 0.38 + boatWaveH * 0.72;
+            boat.position.y += (targetBoatY - boat.position.y) * Math.min(1, 10 * dt);
+            boat.rotation.set(
+                wavePitch + currentPitch,
+                heading,
+                waveRoll + currentBank
+            );
+        }
+
+
         boat.updateMatrixWorld(true);
         flagPivot.rotation.y = Math.sin(t * 3) * 0.3;
 

@@ -22,6 +22,7 @@ app.use(express.static(frontendDir));
 
 const PORT = process.env.PORT || 5000;
 
+app.listen(PORT, () => console.log(`Open http://localhost:${PORT}`));
+
 connectDB()
-    .then(() => app.listen(PORT, () => console.log(`Open http://localhost:${PORT}`)))
-    .catch((err) => console.error('MongoDB error:', err.message));
+    .catch((err) => console.warn('MongoDB note:', err.message, '\n(Running with local fallback data)'));

@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const Island = require('../models/Island');
 const auth = require('../middleware/auth');
 
@@ -91,13 +92,15 @@ const DEFAULT_ISLANDS = [
 
 router.get('/', async (req, res) => {
     try {
+        if (mongoose.connection.readyState !== 1) {
+            return res.json(DEFAULT_ISLANDS);
+        }
         let list = await Island.find().lean();
         if (!list || list.length === 0) {
             try {
                 await Island.insertMany(DEFAULT_ISLANDS);
                 list = await Island.find().lean();
             } catch (seedErr) {
-                console.warn('Auto-seed warning:', seedErr.message);
                 return res.json(DEFAULT_ISLANDS);
             }
         }
