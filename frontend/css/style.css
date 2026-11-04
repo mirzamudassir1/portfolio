@@ -31,29 +31,60 @@ canvas {
 #panel {
     position: fixed;
     right: 20px;
-    top: 64px;
-    width: 320px;
+    top: 60px;
+    width: 380px;
+    max-width: calc(100vw - 40px);
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
     display: none;
-    background: #0b1d33ee;
+    background: rgba(11, 29, 51, 0.95);
+    backdrop-filter: blur(12px);
     color: #fff;
-    padding: 18px;
-    border-radius: 12px;
+    padding: 20px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 209, 102, 0.3);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
     z-index: 5;
+    transition: all 0.25s ease;
+}
+
+#panel::-webkit-scrollbar {
+    width: 6px;
+}
+
+#panel::-webkit-scrollbar-thumb {
+    background: rgba(255, 209, 102, 0.4);
+    border-radius: 6px;
 }
 
 #panel h2 {
-    margin: 0 0 10px;
+    margin: 0 0 12px;
     color: #ffd166;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+#panel .panel-badge {
+    font-size: 11px;
+    background: rgba(255, 209, 102, 0.2);
+    color: #ffd166;
+    padding: 3px 8px;
+    border-radius: 20px;
+    font-weight: 600;
 }
 
 #panel p {
     margin: 6px 0;
+    line-height: 1.5;
 }
 
 #panel a {
     color: #7dd3fc;
-    display: block;
+    display: inline-block;
     margin-top: 6px;
+    text-decoration: none;
 }
 
 #panel input,
@@ -82,6 +113,93 @@ canvas {
     font-size: 14px;
 }
 
+/* Project Cards in Island Side Panel */
+.project-card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 14px;
+    transition: transform 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.project-card:hover {
+    transform: translateY(-2px);
+    border-color: #ffd166;
+    background: rgba(255, 255, 255, 0.09);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+}
+
+.project-card-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #ffd166;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.project-card-desc {
+    font-size: 12.5px;
+    color: #cbd5e1;
+    line-height: 1.45;
+    margin: 6px 0;
+}
+
+.project-tech-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px 0;
+}
+
+.project-tech-tag {
+    font-size: 10.5px;
+    font-weight: 600;
+    background: rgba(56, 189, 248, 0.15);
+    color: #7dd3fc;
+    padding: 2px 7px;
+    border-radius: 10px;
+    border: 1px solid rgba(56, 189, 248, 0.28);
+}
+
+.project-links-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.project-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background 0.2s;
+}
+
+.project-btn-primary {
+    background: #ffd166;
+    color: #0b1d33 !important;
+}
+
+.project-btn-primary:hover {
+    background: #ffe08a;
+}
+
+.project-btn-secondary {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff !important;
+}
+
+.project-btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.24);
+}
+
 /* ---------- Admin modal ---------- */
 #adminModal {
     position: fixed;
@@ -98,10 +216,11 @@ canvas {
     background: #0b1d33;
     color: #fff;
     padding: 22px;
-    width: min(540px, 92vw);
-    max-height: 88vh;
-    overflow: auto;
-    border-radius: 12px;
+    width: min(580px, 94vw);
+    max-height: 90vh;
+    overflow-y: auto;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 209, 102, 0.2);
 }
 
 #adminModal h2 {
@@ -125,6 +244,8 @@ canvas {
     border: none;
     border-radius: 6px;
     font-family: inherit;
+    background: #102a45;
+    color: #fff;
 }
 
 #adminModal button {
@@ -185,4 +306,149 @@ canvas {
 #adminModal .msg p {
     margin: 6px 0 0;
     white-space: pre-wrap;
+}
+
+/* Admin Projects Manager UI */
+.pm-container {
+    margin-top: 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 209, 102, 0.2);
+    border-radius: 10px;
+    padding: 14px;
+}
+
+.pm-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.pm-header h3 {
+    margin: 0;
+    color: #ffd166;
+    font-size: 15px;
+}
+
+.pm-add-btn {
+    background: #ffd166 !important;
+    color: #0b1d33 !important;
+    font-size: 12px;
+    font-weight: bold;
+    padding: 5px 12px !important;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.pm-card {
+    background: rgba(16, 42, 69, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+    position: relative;
+}
+
+.pm-card:hover {
+    border-color: rgba(255, 209, 102, 0.35);
+}
+
+.pm-del-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: #e74c3c !important;
+    color: #fff !important;
+    padding: 3px 8px !important;
+    font-size: 11px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.pm-card label {
+    font-size: 11px !important;
+    color: #94a3b8 !important;
+    margin-top: 6px !important;
+}
+
+.pm-card input,
+.pm-card textarea {
+    background: #091a2d !important;
+    color: #fff !important;
+    border: 1px solid #1e3a5f !important;
+    font-size: 12.5px !important;
+    padding: 6px 8px !important;
+}
+
+
+/* Admin Projects Manager UI */
+.pm-container {
+    margin-top: 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 209, 102, 0.2);
+    border-radius: 10px;
+    padding: 14px;
+}
+
+.pm-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.pm-header h3 {
+    margin: 0;
+    color: #ffd166;
+    font-size: 15px;
+}
+
+.pm-add-btn {
+    background: #ffd166 !important;
+    color: #0b1d33 !important;
+    font-size: 12px;
+    font-weight: bold;
+    padding: 5px 12px !important;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.pm-card {
+    background: rgba(16, 42, 69, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+    position: relative;
+}
+
+.pm-card:hover {
+    border-color: rgba(255, 209, 102, 0.35);
+}
+
+.pm-del-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: #e74c3c !important;
+    color: #fff !important;
+    padding: 3px 8px !important;
+    font-size: 11px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.pm-card label {
+    font-size: 11px !important;
+    color: #94a3b8 !important;
+    margin-top: 6px !important;
+}
+
+.pm-card input,
+.pm-card textarea {
+    background: #091a2d !important;
+    color: #fff !important;
+    border: 1px solid #1e3a5f !important;
+    font-size: 12.5px !important;
+    padding: 6px 8px !important;
 }

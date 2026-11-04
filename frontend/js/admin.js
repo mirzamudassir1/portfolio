@@ -15,7 +15,10 @@ document.body.appendChild(modal);
 ['keydown', 'keyup'].forEach((ev) => modal.addEventListener(ev, (e) => e.stopPropagation()));
 modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
-const v = (sel) => modal.querySelector(sel).value.trim();
+const v = (sel) => {
+    const el = modal.querySelector(sel);
+    return el ? el.value.trim() : '';
+};
 
 function closeModal() { modal.style.display = 'none'; }
 
@@ -73,6 +76,28 @@ function showLogin(msg = '') {
     };
 }
 
+// Helper to initialize projects if not present
+function parseProjectsFromIsland(d) {
+    if (Array.isArray(d.projects) && d.projects.length > 0) {
+        return JSON.parse(JSON.stringify(d.projects));
+    }
+    const lines = d.lines || [];
+    const links = d.links || [];
+    return lines.map((line, idx) => {
+        const parts = line.split('-').map((s) => s.trim());
+        const title = parts[0] || `Project ${idx + 1}`;
+        const desc = parts.slice(1).join(' - ') || '';
+        const matchingLink = links[idx] || {};
+        return {
+            title,
+            description: desc,
+            tech: ['JavaScript'],
+            github: matchingLink.url || '',
+            demo: '',
+        };
+    });
+}
+
 // ---------- Island editor ----------
 async function showEditor(idx = 0) {
     box('<p>Loading...</p>');
@@ -81,6 +106,44 @@ async function showEditor(idx = 0) {
         const d = islands[idx];
         if (!d) { box('<h2>Admin</h2><p>No islands found. Run node seed.js once.</p>'); return; }
 
+        const isProjects = d.type === 'projects' || d.name.toLowerCase() === 'projects';
+        let projectList = isProjects ? parseProjectsFromIsland(d) : [];
+
+        function renderProjectsHTML() {
+            if (!isProjects) return '';
+            return `
+        <div class="pm-container">
+          <div class="pm-header">
+            <h3>🚀 Projects Showcase Manager (${projectList.length})</h3>
+            <button type="button" id="pmAddBtn" class="pm-add-btn">+ Add New Project</button>
+          </div>
+          <div id="pmList">
+            ${projectList.map((p, pIdx) => `
+              <div class="pm-card" data-idx="${pIdx}">
+                <button type="button" class="pm-del-btn" data-del="${pIdx}">✕ Remove</button>
+                <label>Project Title</label>
+                <input class="pm-title" value="${esc(p.title)}" placeholder="e.g. QuizPro - Exam App">
+                <label>Description</label>
+                <textarea class="pm-desc" rows="2" placeholder="Brief summary of features...">${esc(p.description || '')}</textarea>
+                <label>Tech Stack (comma separated)</label>
+                <input class="pm-tech" value="${esc(Array.isArray(p.tech) ? p.tech.join(', ') : (p.tech || ''))}" placeholder="React, Node.js, Express, MongoDB">
+                <div style="display:flex;gap:8px;">
+                  <div style="flex:1;">
+                    <label>GitHub URL</label>
+                    <input class="pm-github" value="${esc(p.github || '')}" placeholder="https://github.com/...">
+                  </div>
+                  <div style="flex:1;">
+                    <label>Live Demo URL</label>
+                    <input class="pm-demo" value="${esc(p.demo || '')}" placeholder="https://...">
+                  </div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+        }
+
         box(`
       <h2>Edit portfolio</h2>
       <div class="tabs">
@@ -88,21 +151,35 @@ async function showEditor(idx = 0) {
         <button id="tMsg">📬 Messages</button>
         <button id="tOut">Logout</button>
       </div>
+
       <label>Island name (floating label)</label>
       <input id="fName" value="${esc(d.name)}">
       <label>Panel title</label>
       <input id="fTitle" value="${esc(d.title)}">
+
+      ${renderProjectsHTML()}
+
       <label>Text lines (one per line)</label>
-      <textarea id="fLines" rows="6">${esc((d.lines || []).join('\n'))}</textarea>
+      <textarea id="fLines" rows="5">${esc((d.lines || []).join('\n'))}</textarea>
       <label>Links (one per line, format: Label | https://url)</label>
       <textarea id="fLinks" rows="3">${esc((d.links || []).map((l) => `${l.label} | ${l.url}`).join('\n'))}</textarea>
-      <label>Position X</label>
-      <input id="fX" type="number" value="${d.x}">
-      <label>Position Z</label>
-      <input id="fZ" type="number" value="${d.z}">
-      <button class="save" id="fSave">Save changes</button>
-      <div class="st" id="fSt"></div>`);
+      
+      <div style="display:flex;gap:12px;">
+        <div style="flex:1;">
+          <label>Position X</label>
+          <input id="fX" type="number" value="${d.x}">
+        </div>
+        <div style="flex:1;">
+          <label>Position Z</label>
+          <input id="fZ" type="number" value="${d.z}">
+        </div>
+      </div>
 
+      <button class="save" id="fSave">Save changes</button>
+      <div class="st" id="fSt"></div>
+    `);
+
+        // Bind tabs
         modal.querySelectorAll('.tabs [data-i]').forEach((b) => {
             b.onclick = () => showEditor(Number(b.dataset.i));
         });
@@ -113,25 +190,102 @@ async function showEditor(idx = 0) {
             closeModal();
         };
 
+        // Bind projects manager events
+        if (isProjects) {
+            const syncDOMToProjects = () => {
+                const cards = modal.querySelectorAll('.pm-card');
+                projectList = Array.from(cards).map((c) => ({
+                    title: c.querySelector('.pm-title').value.trim(),
+                    description: c.querySelector('.pm-desc').value.trim(),
+                    tech: c.querySelector('.pm-tech').value.split(',').map((s) => s.trim()).filter(Boolean),
+                    github: c.querySelector('.pm-github').value.trim(),
+                    demo: c.querySelector('.pm-demo').value.trim(),
+                }));
+            };
+
+            const refreshProjectsUI = () => {
+                syncDOMToProjects();
+                const container = modal.querySelector('.pm-container');
+                if (container) {
+                    const temp = document.createElement('div');
+                    temp.innerHTML = renderProjectsHTML();
+                    container.replaceWith(temp.firstElementChild);
+                    bindProjectEvents();
+                }
+            };
+
+            const bindProjectEvents = () => {
+                const addBtn = modal.querySelector('#pmAddBtn');
+                if (addBtn) {
+                    addBtn.onclick = () => {
+                        syncDOMToProjects();
+                        projectList.push({
+                            title: 'New Project',
+                            description: 'Description of the new project...',
+                            tech: ['React', 'Node.js'],
+                            github: '',
+                            demo: '',
+                        });
+                        refreshProjectsUI();
+                    };
+                }
+                modal.querySelectorAll('[data-del]').forEach((delBtn) => {
+                    delBtn.onclick = (e) => {
+                        syncDOMToProjects();
+                        const pIdx = Number(e.currentTarget.dataset.del);
+                        projectList.splice(pIdx, 1);
+                        refreshProjectsUI();
+                    };
+                });
+            };
+
+            bindProjectEvents();
+        }
+
         modal.querySelector('#fSave').onclick = async () => {
             const st = modal.querySelector('#fSt');
+            st.textContent = 'Saving...';
+
+            let savedProjects = [];
+            if (isProjects) {
+                const cards = modal.querySelectorAll('.pm-card');
+                savedProjects = Array.from(cards).map((c) => ({
+                    title: c.querySelector('.pm-title').value.trim(),
+                    description: c.querySelector('.pm-desc').value.trim(),
+                    tech: c.querySelector('.pm-tech').value.split(',').map((s) => s.trim()).filter(Boolean),
+                    github: c.querySelector('.pm-github').value.trim(),
+                    demo: c.querySelector('.pm-demo').value.trim(),
+                })).filter((p) => p.title);
+            }
+
+            // Sync lines & links
+            let lines = v('#fLines').split('\n').map((s) => s.trim()).filter(Boolean);
+            if (isProjects && savedProjects.length > 0 && (!lines || lines.length === 0)) {
+                lines = savedProjects.map((p) => p.description ? `${p.title} - ${p.description}` : p.title);
+            }
+
+            let links = v('#fLinks').split('\n').map((s) => s.trim()).filter(Boolean).map((l) => {
+                const [label, ...rest] = l.split('|');
+                return { label: label.trim(), url: rest.join('|').trim() };
+            }).filter((l) => l.label && l.url);
+
             const body = {
                 name: v('#fName'),
                 title: v('#fTitle'),
-                lines: v('#fLines').split('\n').map((s) => s.trim()).filter(Boolean),
-                links: v('#fLinks').split('\n').map((s) => s.trim()).filter(Boolean).map((l) => {
-                    const [label, ...rest] = l.split('|');
-                    return { label: label.trim(), url: rest.join('|').trim() };
-                }).filter((l) => l.label && l.url),
+                lines,
+                links,
+                projects: savedProjects,
                 x: Number(v('#fX')),
                 z: Number(v('#fZ')),
             };
+
             try {
-                await api('/api/islands/' + d._id, { method: 'PUT', body: JSON.stringify(body) });
-                st.textContent = 'Saved! Reloading...';
-                setTimeout(() => location.reload(), 700);
+                const targetId = d._id || ('island_' + d.type);
+                await api('/api/islands/' + targetId, { method: 'PUT', body: JSON.stringify(body) });
+                st.textContent = 'Saved successfully! Updating view...';
+                setTimeout(() => location.reload(), 600);
             } catch (e) {
-                if (e.message !== 'auth') st.textContent = e.message;
+                if (e.message !== 'auth') st.textContent = 'Error: ' + e.message;
             }
         };
     } catch (e) {

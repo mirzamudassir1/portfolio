@@ -26,7 +26,7 @@ export function buildThemedIsland(d, makeLabel) {
     // one broken island file can never crash the others
     let out = {};
     try {
-        out = theme.build(g, r) || {};
+        out = theme.build(g, r, d) || {};
     } catch (err) {
         console.error('Island build failed:', d.name, err);
     }

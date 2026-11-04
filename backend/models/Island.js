@@ -5,6 +5,14 @@ const linkSchema = new mongoose.Schema({
     url: { type: String, required: true },
 }, { _id: false });
 
+const projectItemSchema = new mongoose.Schema({
+    title: { type: String, required: true },
+    description: { type: String, default: '' },
+    tech: [{ type: String }],
+    demo: { type: String, default: '' },
+    github: { type: String, default: '' },
+}, { _id: false });
+
 const islandSchema = new mongoose.Schema({
     name: { type: String, required: true },
     type: { type: String, required: true },
@@ -15,6 +23,7 @@ const islandSchema = new mongoose.Schema({
     title: { type: String, required: true },
     lines: [{ type: String }],
     links: [linkSchema],
+    projects: [projectItemSchema],
 }, { timestamps: true });
 
 module.exports = mongoose.model('Island', islandSchema);

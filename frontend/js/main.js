@@ -1,6 +1,16 @@
 import * as THREE from 'three';
 import { buildThemedIsland } from './islands/index.js';
 
+function escHtml(s = "") {
+    return String(s).replace(/[&<>"'\\]/g, (c) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+    }[c]));
+}
+
 function toast(text) {
     const d = document.createElement('div');
     d.textContent = text;
@@ -1325,8 +1335,103 @@ function showPanel(d) {
     panel.style.display = 'block';
 
     const h = document.createElement('h2');
-    h.textContent = d.title;
     panel.appendChild(h);
+
+    if (d.type === 'projects' || (d.name && d.name.toLowerCase() === 'projects')) {
+        const projectList = (Array.isArray(d.projects) && d.projects.length > 0)
+            ? d.projects
+            : (d.lines || []).map((line, idx) => {
+                const parts = line.split('-').map((s) => s.trim());
+                return {
+                    title: parts[0] || ('Project ' + (idx + 1)),
+                    description: parts.slice(1).join(' - ') || '',
+                    tech: ['React', 'Node.js'],
+                    github: (d.links && d.links[idx]) ? d.links[idx].url : '',
+                    demo: '',
+                };
+            });
+
+        h.innerHTML = '<span>' + escHtml(d.title) + '</span> <span class="panel-badge">' + projectList.length + ' Projects</span>';
+
+        const container = document.createElement('div');
+        container.className = 'projects-container';
+
+        projectList.forEach((proj) => {
+            const card = document.createElement('div');
+            card.className = 'project-card';
+
+            const titleDiv = document.createElement('div');
+            titleDiv.className = 'project-card-title';
+            titleDiv.innerHTML = '<span>🚀</span> <span>' + escHtml(proj.title) + '</span>';
+            card.appendChild(titleDiv);
+
+            if (proj.description) {
+                const desc = document.createElement('div');
+                desc.className = 'project-card-desc';
+                desc.textContent = proj.description;
+                card.appendChild(desc);
+            }
+
+            const techList = Array.isArray(proj.tech)
+                ? proj.tech
+                : (proj.tech ? String(proj.tech).split(',').map((s) => s.trim()).filter(Boolean) : []);
+
+            if (techList.length > 0) {
+                const techWrap = document.createElement('div');
+                techWrap.className = 'project-tech-tags';
+                techList.forEach((t) => {
+                    const tag = document.createElement('span');
+                    tag.className = 'project-tech-tag';
+                    tag.textContent = t;
+                    techWrap.appendChild(tag);
+                });
+                card.appendChild(techWrap);
+            }
+
+            if (proj.demo || proj.github) {
+                const linkRow = document.createElement('div');
+                linkRow.className = 'project-links-row';
+                if (proj.demo) {
+                    const aDemo = document.createElement('a');
+                    aDemo.className = 'project-btn project-btn-primary';
+                    aDemo.href = proj.demo;
+                    aDemo.target = '_blank';
+                    aDemo.textContent = '🌐 Live Demo';
+                    linkRow.appendChild(aDemo);
+                }
+                if (proj.github) {
+                    const aGit = document.createElement('a');
+                    aGit.className = 'project-btn project-btn-secondary';
+                    aGit.href = proj.github;
+                    aGit.target = '_blank';
+                    aGit.textContent = '⭐ GitHub Code';
+                    linkRow.appendChild(aGit);
+                }
+                card.appendChild(linkRow);
+            }
+
+            container.appendChild(card);
+        });
+
+        panel.appendChild(container);
+
+        if (Array.isArray(d.links) && d.links.length > 0) {
+            const footer = document.createElement('div');
+            footer.style.cssText = 'margin-top:14px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.12);display:flex;flex-wrap:wrap;gap:10px;';
+            d.links.forEach((l) => {
+                const a = document.createElement('a');
+                a.href = l.url;
+                a.target = '_blank';
+                a.style.cssText = 'color:#ffd166;font-size:12px;font-weight:600;text-decoration:none;';
+                a.textContent = '🔗 ' + l.label;
+                footer.appendChild(a);
+            });
+            panel.appendChild(footer);
+        }
+        return;
+    }
+
+    h.textContent = d.title;
 
     (d.lines || []).forEach((t) => {
         const p = document.createElement('p');
