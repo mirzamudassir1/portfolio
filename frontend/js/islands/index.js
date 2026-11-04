@@ -34,5 +34,5 @@ export function buildThemedIsland(d, makeLabel) {
     const label = makeLabel(d.name);
     label.position.y = theme.labelY || 15;
     g.add(label);
-    return { group: g, solids: out.solids || [], update: out.update };
+    return { group: g, solids: out.solids || [], update: out.update, props: out.props || [] };
 }

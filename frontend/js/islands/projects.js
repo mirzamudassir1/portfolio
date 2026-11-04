@@ -43,12 +43,15 @@ export default {
         [-1.8, 0.6].forEach((z) => box(g, 1.6, 0.2, 0.25, 0x5a3a20, 2.6, PLAT + 0.1, z));
         S.push({ x: 2.6, z: -1.4, r: 1.1 }, { x: 2.6, z: 0.2, r: 1.1 });
 
-        // crates + barrel
-        box(g, 0.8, 0.8, 0.8, 0xa8723c, -3.6, PLAT + 0.4, 1.4);
-        box(g, 0.6, 0.6, 0.6, 0xb8823c, -2.6, PLAT + 0.3, 2.0);
-        cyl(g, 0.35, 0.35, 0.8, 0x7a4a28, -4.3, PLAT + 0.4, 0.6, { seg: 12 });
-        S.push({ x: -3.6, z: 1.4, r: 0.6 }, { x: -2.6, z: 2.0, r: 0.5 });
-
-        return { solids: S, update: (t) => { arm.rotation.y = Math.sin(t * 0.4) * 0.7; } };
+        // Dynamic pushable crates and barrel
+        return {
+            solids: S,
+            update: (t) => { arm.rotation.y = Math.sin(t * 0.4) * 0.7; },
+            props: [
+                { type: 'box', w: 0.8, h: 0.8, d: 0.8, color: 0xa8723c, x: -3.6, y: PLAT + 0.4, z: 1.4, mass: 1.0 },
+                { type: 'box', w: 0.6, h: 0.6, d: 0.6, color: 0xb8823c, x: -2.6, y: PLAT + 0.3, z: 2.0, mass: 0.7 },
+                { type: 'barrel', rt: 0.35, rb: 0.35, h: 0.8, color: 0x7a4a28, x: -4.3, y: PLAT + 0.4, z: 0.6, mass: 1.2 },
+            ],
+        };
     },
 };

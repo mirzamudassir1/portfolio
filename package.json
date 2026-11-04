@@ -1,0 +1,9 @@
+{
+  "name": "onepiece-portfolio",
+  "version": "1.0.0",
+  "description": "3D One Piece Sailing Portfolio",
+  "scripts": {
+    "start": "node backend/server.js"
+  }
+}
+

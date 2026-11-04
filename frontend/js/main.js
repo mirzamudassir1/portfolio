@@ -18,6 +18,7 @@ const easeOutBack = (x) => {
 
 // ---------- Scene ----------
 const scene = new THREE.Scene();
+let islands = [];
 scene.background = new THREE.Color(0x87ceeb);
 scene.fog = new THREE.Fog(0x87ceeb, 150, 600);
 
@@ -63,7 +64,7 @@ const water = new THREE.Mesh(
         shininess: 95,
         specular: 0x90e0ef,
         transparent: true,
-        opacity: 0.94,
+        opacity: 0.86,
     })
 );
 scene.add(water);
@@ -96,6 +97,311 @@ function addShoreSurf(cx, cz, baseRadius) {
 }
 
 // (Ship white water wake trails removed)
+
+// ---------- Ocean Marine Life (Fish Schools, Dolphins, Manta Rays, Whale) ----------
+const seaCreaturesGroup = new THREE.Group();
+scene.add(seaCreaturesGroup);
+
+// --- 1. Tropical Fish Schools ---
+const fishPalette = [
+    0xff6b35, // Clownfish Orange
+    0x00b4d8, // Blue Tang
+    0xffd166, // Golden Yellow Tang
+    0x06d6a0, // Emerald Green
+    0xf72585, // Neon Magenta
+];
+
+function createFishModel(color) {
+    const g = new THREE.Group();
+    // Torpedo Body
+    const bodyGeo = new THREE.ConeGeometry(0.16, 0.6, 7);
+    bodyGeo.rotateX(Math.PI / 2);
+    const body = new THREE.Mesh(bodyGeo, new THREE.MeshPhongMaterial({ color, shininess: 85 }));
+    g.add(body);
+
+    // Belly stripe
+    const stripe = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.14, 0.14, 0.12, 8),
+        new THREE.MeshBasicMaterial({ color: 0xffffff })
+    );
+    stripe.rotation.x = Math.PI / 2;
+    stripe.position.set(0, 0, 0.05);
+    g.add(stripe);
+
+    // Tail fin pivot
+    const tailPivot = new THREE.Group();
+    tailPivot.position.set(0, 0, -0.3);
+    const finGeo = new THREE.BufferGeometry();
+    const verts = new Float32Array([
+        0, 0, 0,
+        0, 0.18, -0.25,
+        0, -0.18, -0.25,
+    ]);
+    finGeo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+    finGeo.computeVertexNormals();
+    const fin = new THREE.Mesh(finGeo, new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide }));
+    tailPivot.add(fin);
+    g.add(tailPivot);
+
+    return { group: g, tailPivot };
+}
+
+const fishSchools = [
+    { cx: 8, cz: -14, radius: 14, count: 14, speed: 1.1, baseDepth: 0.65 },  // Harbor Reef
+    { cx: 35, cz: 35, radius: 22, count: 16, speed: 1.25, baseDepth: 0.8 },  // Between Harbor & Projects
+    { cx: -42, cz: 32, radius: 24, count: 15, speed: 1.2, baseDepth: 0.75 }, // Tech Stack channel
+    { cx: 45, cz: -40, radius: 26, count: 14, speed: 1.15, baseDepth: 0.9 }, // Socials bay
+];
+
+const allFishes = [];
+fishSchools.forEach((school, sIdx) => {
+    for (let i = 0; i < school.count; i++) {
+        const color = fishPalette[(sIdx + i) % fishPalette.length];
+        const fish = createFishModel(color);
+        const fScale = 0.75 + Math.random() * 0.45;
+        fish.group.scale.setScalar(fScale);
+        seaCreaturesGroup.add(fish.group);
+
+        allFishes.push({
+            mesh: fish.group,
+            tailPivot: fish.tailPivot,
+            school,
+            angle: (i / school.count) * Math.PI * 2 + Math.random() * 0.4,
+            distOffset: (Math.random() - 0.5) * 6,
+            depthOffset: (Math.random() - 0.5) * 0.5,
+            swimPhase: Math.random() * Math.PI * 2,
+            tailSpeed: 10 + Math.random() * 5,
+        });
+    }
+});
+
+// (Dolphin models removed)
+
+// --- 3. Giant Manta Rays ---
+function createMantaModel() {
+    const g = new THREE.Group();
+    const dorsalMat = new THREE.MeshPhongMaterial({ color: 0x1d2d44, shininess: 75 });
+    const bellyMat = new THREE.MeshPhongMaterial({ color: 0xf0f8ff, shininess: 50 });
+
+    // Diamond torso
+    const torsoGeo = new THREE.ConeGeometry(0.85, 1.8, 4);
+    torsoGeo.rotateX(Math.PI / 2);
+    torsoGeo.rotateY(Math.PI / 4);
+    torsoGeo.scale(1.4, 0.22, 1.0);
+    const torso = new THREE.Mesh(torsoGeo, dorsalMat);
+    g.add(torso);
+
+    // Belly
+    const belly = new THREE.Mesh(torsoGeo, bellyMat);
+    belly.scale.set(1.35, 0.18, 0.95);
+    belly.position.y = -0.04;
+    g.add(belly);
+
+    // Flexible Wingtips
+    const wingL = new THREE.Group();
+    const wingR = new THREE.Group();
+    wingL.position.set(-1.15, 0, 0);
+    wingR.position.set(1.15, 0, 0);
+
+    const tipGeo = new THREE.ConeGeometry(0.5, 1.25, 3);
+    tipGeo.rotateZ(Math.PI / 2);
+    const tL = new THREE.Mesh(tipGeo, dorsalMat);
+    tL.position.set(-0.55, 0, 0);
+    wingL.add(tL);
+
+    const tR = new THREE.Mesh(tipGeo, dorsalMat);
+    tR.position.set(0.55, 0, 0);
+    tR.rotation.z = Math.PI;
+    wingR.add(tR);
+
+    g.add(wingL);
+    g.add(wingR);
+
+    // Long whip tail
+    const tailGeo = new THREE.CylinderGeometry(0.04, 0.01, 2.6, 6);
+    tailGeo.rotateX(Math.PI / 2);
+    const tail = new THREE.Mesh(tailGeo, dorsalMat);
+    tail.position.set(0, 0, -2.1);
+    g.add(tail);
+
+    // Cephalic horn flippers in front
+    [-0.32, 0.32].forEach((x) => {
+        const hornGeo = new THREE.ConeGeometry(0.12, 0.45, 6);
+        hornGeo.rotateX(-Math.PI / 2.2);
+        const horn = new THREE.Mesh(hornGeo, dorsalMat);
+        horn.position.set(x, 0.04, 0.95);
+        g.add(horn);
+    });
+
+    return { group: g, wingL, wingR };
+}
+
+const mantaRays = [];
+const mantaPaths = [
+    { cx: 28, cz: -35, rX: 32, rZ: 24, speed: 0.35, depth: 1.2 },
+    { cx: -35, cz: -28, rX: 28, rZ: 32, speed: 0.42, depth: 1.5 },
+];
+
+mantaPaths.forEach((path, i) => {
+    const mModel = createMantaModel();
+    mModel.group.scale.setScalar(1.2);
+    seaCreaturesGroup.add(mModel.group);
+
+    mantaRays.push({
+        mesh: mModel.group,
+        wingL: mModel.wingL,
+        wingR: mModel.wingR,
+        path,
+        phase: i * Math.PI,
+    });
+});
+
+// --- 4. Giant Friendly Whale (Laboon!) ---
+function createWhaleModel() {
+    const g = new THREE.Group();
+    const whaleMat = new THREE.MeshPhongMaterial({ color: 0x1b263b, shininess: 70 });
+    const bellyMat = new THREE.MeshPhongMaterial({ color: 0xe0e1dd, shininess: 45 });
+
+    // Colossal body
+    const bodyGeo = new THREE.SphereGeometry(2.3, 14, 10);
+    bodyGeo.scale(1.15, 0.88, 2.3);
+    const body = new THREE.Mesh(bodyGeo, whaleMat);
+    g.add(body);
+
+    // Corrugated pale underbelly
+    const bellyGeo = new THREE.SphereGeometry(2.0, 12, 8);
+    bellyGeo.scale(1.0, 0.45, 2.0);
+    const belly = new THREE.Mesh(bellyGeo, bellyMat);
+    belly.position.set(0, -0.65, 0.1);
+    g.add(belly);
+
+    // Kind cartoon whale eyes
+    [-1.85, 1.85].forEach((side) => {
+        const eye = new THREE.Mesh(
+            new THREE.SphereGeometry(0.18, 8, 8),
+            new THREE.MeshBasicMaterial({ color: 0x111111 })
+        );
+        eye.position.set(side * 1.05, 0.25, 2.3);
+        g.add(eye);
+    });
+
+    // Pectoral fins
+    [-1, 1].forEach((side) => {
+        const finGeo = new THREE.BoxGeometry(1.6, 0.15, 0.7);
+        const fin = new THREE.Mesh(finGeo, whaleMat);
+        fin.position.set(side * 2.2, -0.4, 0.5);
+        fin.rotation.z = side * 0.32;
+        fin.rotation.y = side * 0.2;
+        g.add(fin);
+    });
+
+    // Fluke & tail pivot
+    const tailPivot = new THREE.Group();
+    tailPivot.position.set(0, 0, -4.6);
+    const flukeGeo = new THREE.BoxGeometry(4.0, 0.18, 1.3);
+    const fluke = new THREE.Mesh(flukeGeo, whaleMat);
+    fluke.position.set(0, 0, -0.6);
+    tailPivot.add(fluke);
+    g.add(tailPivot);
+
+    return { group: g, tailPivot };
+}
+
+const whaleModel = createWhaleModel();
+seaCreaturesGroup.add(whaleModel.group);
+const whaleData = {
+    mesh: whaleModel.group,
+    tailPivot: whaleModel.tailPivot,
+    cx: 0, cz: 25,
+    radius: 75,
+    speed: 0.18,
+    angle: 0,
+    blowTimer: 8.0,
+};
+
+function updateSeaCreatures(dt, t) {
+    // 1. Update Fish Schools
+    for (const f of allFishes) {
+        f.angle += (f.school.speed / f.school.radius) * dt;
+        const curR = f.school.radius + f.distOffset + Math.sin(t * 1.5 + f.swimPhase) * 1.2;
+        const curX = f.school.cx + Math.cos(f.angle) * curR;
+        const curZ = f.school.cz + Math.sin(f.angle) * curR;
+        const waveH = getWaveHeight(curX, curZ, t);
+
+        const targetY = waveH - f.school.baseDepth - f.depthOffset + Math.sin(t * 2 + f.swimPhase) * 0.15;
+        f.mesh.position.set(curX, targetY, curZ);
+
+        // Face movement tangent
+        const faceAngle = f.angle + Math.PI / 2;
+        f.mesh.rotation.y = -faceAngle + Math.PI / 2;
+        f.mesh.rotation.x = Math.sin(t * 2.5 + f.swimPhase) * 0.12;
+        f.mesh.rotation.z = Math.cos(t * 2.5 + f.swimPhase) * 0.1;
+
+        // Tail wiggle
+        f.tailPivot.rotation.y = Math.sin(t * f.tailSpeed + f.swimPhase) * 0.48;
+    }
+
+
+
+    // 3. Update Manta Rays (graceful wing flapping glides)
+    for (const m of mantaRays) {
+        m.phase += m.path.speed * dt;
+        const mx = m.path.cx + Math.sin(m.phase) * m.path.rX;
+        const mz = m.path.cz + Math.sin(m.phase * 2) * (m.path.rZ * 0.5);
+        const waveH = getWaveHeight(mx, mz, t);
+        const my = waveH - m.path.depth + Math.sin(m.phase * 1.5) * 0.3;
+
+        const dx = mx - m.mesh.position.x;
+        const dz = mz - m.mesh.position.z;
+        m.mesh.position.set(mx, my, mz);
+
+        if (Math.hypot(dx, dz) > 0.01) {
+            m.mesh.rotation.y = Math.atan2(dx, dz);
+        }
+
+        // Wing flapping undulation
+        const flap = Math.sin(t * 2.8 + m.phase) * 0.38;
+        m.wingL.rotation.z = flap;
+        m.wingR.rotation.z = -flap;
+        m.mesh.rotation.z = -flap * 0.25;
+    }
+
+    // 4. Update Giant Whale (Laboon)
+    whaleData.angle += (whaleData.speed / whaleData.radius) * dt;
+    const wx = whaleData.cx + Math.cos(whaleData.angle) * whaleData.radius;
+    const wz = whaleData.cz + Math.sin(whaleData.angle) * (whaleData.radius * 0.85);
+    const wWaveH = getWaveHeight(wx, wz, t);
+
+    whaleData.blowTimer -= dt;
+    const isBreaching = whaleData.blowTimer < 3.2;
+
+    let wy;
+    if (isBreaching) {
+        // Breaches surface majestically
+        wy = wWaveH - 0.2 + Math.sin((3.2 - whaleData.blowTimer) / 3.2 * Math.PI) * 1.2;
+        whaleData.mesh.rotation.x = (whaleData.blowTimer > 1.6 ? -0.18 : 0.18);
+
+        // Blowhole water vapor spout!
+        if (whaleData.blowTimer > 1.5 && Math.random() < 0.6) {
+            const blowPos = whaleData.mesh.localToWorld(new THREE.Vector3(0, 1.4, 1.2));
+            spawnParticles(blowPos.x, blowPos.y, blowPos.z, 4, true);
+        }
+    } else {
+        // Cruising submerged
+        wy = wWaveH - 2.8 + Math.sin(t * 0.8) * 0.5;
+        whaleData.mesh.rotation.x = Math.sin(t * 1.2) * 0.08;
+    }
+
+    if (whaleData.blowTimer <= 0) {
+        whaleData.blowTimer = 22.0 + Math.random() * 8.0;
+        spawnParticles(wx, wWaveH, wz, 12, true);
+    }
+
+    whaleData.mesh.position.set(wx, wy, wz);
+    const whaleHeading = -whaleData.angle + Math.PI / 2;
+    whaleData.mesh.rotation.y = whaleHeading + Math.PI / 2;
+    whaleData.tailPivot.rotation.x = Math.sin(t * 3.2) * 0.35;
+}
 
 // ---------- Ship (pirate galleon) ----------
 const SHIP_SCALE = 0.5; // make the ship bigger or smaller here
@@ -552,9 +858,18 @@ const barrelProp = createCylinderProp({
 });
 
 function getPropSurface(x, z, time) {
+    // 1. Check if prop is on an island plateau or slope
+    for (const d of islands) {
+        const dist = Math.hypot(x - d.x, z - d.z);
+        if (dist < d.radius * 0.94) {
+            return { height: islandSurface(dist, d.radius), isWater: false };
+        }
+    }
+    // 2. Check wooden pier
     if (x >= PIER.x0 - 0.05 && x <= PIER.x1 + 0.05 && z >= PIER.z0 && z <= PIER.z1) {
         return { height: PIER.top, isWater: false };
     }
+    // 3. Check harbor shore & steps
     if (z < PIER.z0) {
         if (x > -3.5 && x < 3.5) {
             if (z >= PIER.z0 - 1.0) return { height: 1.67, isWater: false };
@@ -566,6 +881,7 @@ function getPropSurface(x, z, time) {
             return { height: h, isWater: false };
         }
     }
+    // 4. Floating on dynamic ocean waves
     const waveY = getWaveHeight(x, z, time);
     return { height: waveY, isWater: true };
 }
@@ -858,6 +1174,30 @@ function buildIsland(d) {
     addShoreSurf(d.x, d.z, d.radius);
     d._solids = t.solids;
     if (t.update) islandAnimators.push(t.update);
+    if (t.props && t.props.length > 0) {
+        for (const p of t.props) {
+            const wx = d.x + p.x;
+            const wz = d.z + p.z;
+            const wy = p.y;
+            if (p.type === 'barrel') {
+                createCylinderProp({
+                    id: `${d.name}_barrel_${p.x}_${p.z}`,
+                    rt: p.rt, rb: p.rb, h: p.h,
+                    color: p.color,
+                    x: wx, y: wy, z: wz,
+                    mass: p.mass || 1.2,
+                });
+            } else {
+                createBoxProp({
+                    id: `${d.name}_box_${p.x}_${p.z}`,
+                    w: p.w, h: p.h, d: p.d,
+                    color: p.color,
+                    x: wx, y: wy, z: wz,
+                    mass: p.mass || 1.0,
+                });
+            }
+        }
+    }
 }
 
 // treasure chests (open when the explorer walks up to them)
@@ -904,7 +1244,6 @@ function buildChest(d, i) {
     chests.push({ pivot, glow, x: cx, z: cz, open: 0 });
 }
 
-let islands = [];
 fetch('/api/islands')
     .then((r) => r.json())
     .then((data) => {
@@ -1528,14 +1867,14 @@ function handlePlayerPropCollision(dt, mx, mz, isMoving) {
             }
 
             // Separate player and prop
-            const pushRatio = 0.82;
+            const pushRatio = 0.85;
             prop.x += nx * pen * pushRatio;
             prop.z += nz * pen * pushRatio;
             p.x -= nx * pen * (1 - pushRatio);
             p.z -= nz * pen * (1 - pushRatio);
 
             // Crash impulse
-            const hitSpeed = isMoving ? 4.5 : 2.0;
+            const hitSpeed = isMoving ? 5.2 : 2.8;
             const impulse = hitSpeed / prop.mass;
             prop.vx += nx * impulse;
             prop.vz += nz * impulse;
@@ -1675,7 +2014,7 @@ function updateDynamicProps(dt, t) {
             }
         }
 
-        if (prop.y < -8 || Math.hypot(prop.x, prop.z) > 120) {
+        if (prop.y < -12 || Math.hypot(prop.x - prop.origX, prop.z - prop.origZ) > 100) {
             resetProps();
         }
     }
@@ -1973,6 +2312,7 @@ function animate() {
         else if (mode === 'boarding') updateBoard(dt);
         if (mode !== 'ship') animateLimbs(dt);
         updateDynamicProps(dt, t);
+        updateSeaCreatures(dt, t);
         updateParticles(dt);
 
         // ---- treasure chests ----
