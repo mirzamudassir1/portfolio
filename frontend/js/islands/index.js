@@ -20,8 +20,10 @@ export function buildThemedIsland(d, makeLabel) {
     const theme = REGISTRY[d.type] || fallback;
 
     // base island (sand ring + grass plateau)
-    cyl(g, r * 0.9, r, 3, d.color, 0, 0.5, 0, { seg: 28, mat: { flatShading: false } });
-    cyl(g, r * 0.62, r * 0.75, 1.5, theme.grass, 0, 2.2, 0, { seg: 28, mat: { flatShading: false } });
+    if (!theme.customBase) {
+        cyl(g, r * 0.9, r, 3, d.color, 0, 0.5, 0, { seg: 28, mat: { flatShading: false } });
+        cyl(g, r * 0.62, r * 0.75, 1.5, theme.grass, 0, 2.2, 0, { seg: 28, mat: { flatShading: false } });
+    }
 
     // one broken island file can never crash the others
     let out = {};
