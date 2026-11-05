@@ -788,57 +788,58 @@ function makeTechBlockMaterials(label, icon, color, category, w, h, d) {
 
     const colHex = '#' + new THREE.Color(color).getHexString();
 
-    // Dark charcoal slate background
-    ctx.fillStyle = '#111827';
+    // Clean crisp white background (human product design)
+    ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, 256, 256);
 
-    // Glowing vibrant category border
+    // Subtle brand-colored border
     ctx.strokeStyle = colHex;
-    ctx.lineWidth = 14;
-    ctx.strokeRect(7, 7, 242, 242);
+    ctx.lineWidth = 10;
+    ctx.strokeRect(5, 5, 246, 246);
 
     // Subtle inner corner accents
     ctx.fillStyle = colHex;
-    ctx.fillRect(14, 14, 20, 20);
-    ctx.fillRect(222, 14, 20, 20);
-    ctx.fillRect(14, 222, 20, 20);
-    ctx.fillRect(222, 222, 20, 20);
+    ctx.fillRect(10, 10, 14, 14);
+    ctx.fillRect(232, 10, 14, 14);
+    ctx.fillRect(10, 232, 14, 14);
+    ctx.fillRect(232, 232, 14, 14);
 
-    // Inner card background
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-    ctx.fillRect(22, 22, 212, 212);
+    // Inner subtle panel
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(18, 18, 220, 220);
 
-    // Tech emoji icon
-    ctx.font = '54px "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
+    // Tech icon / emoji
+    ctx.font = '50px "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(icon || '⚡', 128, 80);
+    ctx.fillText(icon || '⚡', 128, 76);
 
-    // Category banner text
+    // Category banner text in dark slate
+    ctx.fillStyle = '#475569';
+    ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText((category || 'TECH').toUpperCase(), 128, 134);
+
+    // Bold prominent black label
+    ctx.fillStyle = '#111827';
+    const fs = label.length > 9 ? 24 : 30;
+    ctx.font = '800 ' + fs + 'px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText(label, 128, 178);
+
+    // Clean brand underline
     ctx.fillStyle = colHex;
-    ctx.font = 'bold 16px "Segoe UI", sans-serif';
-    ctx.fillText((category || 'TECH').toUpperCase(), 128, 138);
-
-    // Bold prominent label
-    ctx.fillStyle = '#ffffff';
-    const fs = label.length > 9 ? 23 : 29;
-    ctx.font = '900 ' + fs + 'px "Segoe UI", sans-serif';
-    ctx.fillText(label, 128, 180);
-
-    // Accent line
-    ctx.fillStyle = colHex;
-    ctx.fillRect(54, 212, 148, 6);
+    ctx.fillRect(60, 212, 136, 5);
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
 
     const faceMat = new THREE.MeshPhongMaterial({
         map: tex,
+        color: 0xffffff,
         flatShading: true,
-        shininess: 90,
+        shininess: 40,
     });
     const baseMat = new THREE.MeshPhongMaterial({
-        color: 0x1e293b,
+        color: 0xf1f5f9,
         flatShading: true,
     });
 
@@ -1514,8 +1515,8 @@ function showPanel(d) {
     if (d.type === 'skills' || (d.name && d.name.toLowerCase().includes('tech'))) {
         h.innerHTML = '<span>' + escHtml(d.title) + '</span> <span class="panel-badge">12 Tech Blocks</span>';
         const tip = document.createElement('div');
-        tip.style.cssText = 'margin:10px 0 14px;background:rgba(255,107,53,0.14);border:1px solid rgba(255,107,53,0.4);border-radius:10px;padding:12px;font-size:12.5px;line-height:1.5;color:#ffd166;';
-        tip.innerHTML = '🌋 <b>Interactive Volcano Study:</b> Go ashore and push the 12 3D Tech Blocks across the volcanic plateau to study each Language, Library, and Tool in depth!';
+        tip.style.cssText = 'margin:10px 0 14px;background:#f8fafc;border:1px solid #e2e8f0;border-left:3.5px solid #0f172a;border-radius:8px;padding:12px;font-size:12.5px;line-height:1.5;color:#1e293b;';
+        tip.innerHTML = '<b>Interactive Volcano Study:</b> Go ashore and push the 12 3D Tech Blocks across the volcanic plateau to study each Language, Library, and Tool in depth!';
         panel.appendChild(tip);
     }
 
@@ -1658,6 +1659,8 @@ function handleSpace() {
 }
 
 let activeStudyProp = null;
+let hudDismissed = false;
+let lastDismissedPropId = null;
 
 // Floating Study HUD Element
 const techStudyHUD = document.createElement('div');
@@ -1673,8 +1676,21 @@ document.body.appendChild(studyModal);
 
 function renderTechStudyHUD(sd) {
     if (!sd) return;
+    const allStudyProps = dynamicProps.filter((p) => p.studyData);
+    const navButtonsHtml = allStudyProps.map((p) => {
+        const isActive = activeStudyProp && (activeStudyProp.id === p.id || activeStudyProp.studyData.title === p.studyData.title);
+        return `<button class="tsh-nav-btn ${isActive ? 'active' : ''}" data-prop-id="${p.id}" type="button">
+            <span>${p.icon || '📦'}</span>
+            <span>${escHtml(p.label || p.studyData.title)}</span>
+        </button>`;
+    }).join('');
+
     techStudyHUD.innerHTML = `
-        <div class="tsh-badge">📖 STUDYING TECH · ${(sd.category || 'TECH').toUpperCase()}</div>
+        <button class="tsh-close-btn" id="tshCloseBtn" title="Close study card">✕</button>
+        <div class="tsh-header-row">
+            <div class="tsh-badge">STUDYING TECH · ${(sd.category || 'TECH').toUpperCase()}</div>
+        </div>
+        ${allStudyProps.length > 0 ? `<div class="tsh-nav-bar" id="tshNavBar">${navButtonsHtml}</div>` : ''}
         <div class="tsh-title">
             <span class="tsh-icon">${sd.icon || '⚡'}</span>
             <span class="tsh-name">${escHtml(sd.title)}</span>
@@ -1684,49 +1700,86 @@ function renderTechStudyHUD(sd) {
         <div class="tsh-chips">
             ${(sd.skills || []).map((s) => `<span class="tsh-chip">${escHtml(s)}</span>`).join('')}
         </div>
-        <div class="tsh-exp">💡 <b>Mudassir's Experience:</b> ${escHtml(sd.mudassirExp || '')}</div>
+        <div class="tsh-exp"><b>Mudassir's Experience:</b> ${escHtml(sd.mudassirExp || '')}</div>
         <div class="tsh-footer">
-            <span class="tsh-action">⚡ Push block to move & roll it!</span>
+            <span class="tsh-action">Push block to move & roll it</span>
             <button class="tsh-open-btn" id="tshOpenBtn">View Full Study Guide [E]</button>
         </div>
     `;
-    const btn = techStudyHUD.querySelector('#tshOpenBtn');
-    if (btn) btn.onclick = () => openStudyModal(sd);
+
+    const closeBtn = techStudyHUD.querySelector('#tshCloseBtn');
+    if (closeBtn) {
+        closeBtn.onclick = (e) => {
+            e.stopPropagation();
+            techStudyHUD.style.display = 'none';
+            hudDismissed = true;
+            lastDismissedPropId = activeStudyProp ? activeStudyProp.id : true;
+        };
+    }
+
+    const openBtn = techStudyHUD.querySelector('#tshOpenBtn');
+    if (openBtn) {
+        openBtn.onclick = (e) => {
+            e.stopPropagation();
+            openStudyModal(sd);
+        };
+    }
+
+    const navBtns = techStudyHUD.querySelectorAll('.tsh-nav-btn');
+    navBtns.forEach((btn) => {
+        btn.onclick = (e) => {
+            e.stopPropagation();
+            const propId = btn.getAttribute('data-prop-id');
+            const targetProp = allStudyProps.find((p) => p.id === propId);
+            if (targetProp) {
+                activeStudyProp = targetProp;
+                hudDismissed = false;
+                lastDismissedPropId = null;
+                renderTechStudyHUD(targetProp.studyData);
+                techStudyHUD.style.display = 'block';
+            }
+        };
+    });
+
+    const activeBtn = techStudyHUD.querySelector('.tsh-nav-btn.active');
+    if (activeBtn) {
+        activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
 }
 
 function openStudyModal(sd) {
     if (!sd) return;
     studyModal.innerHTML = `
         <div class="study-box">
-            <button class="study-close" id="studyCloseBtn">✕</button>
+            <button class="study-close" id="studyCloseBtn" title="Close">✕</button>
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-                <span style="font-size:36px;">${sd.icon || '⚡'}</span>
+                <span style="font-size:32px;">${sd.icon || '⚡'}</span>
                 <div>
-                    <h2 style="margin:0;color:#ffd166;font-size:24px;">${escHtml(sd.title)}</h2>
-                    <span style="font-size:12px;color:#38bdf8;font-weight:700;">${(sd.category || 'TECH').toUpperCase()} · ${escHtml(sd.level || 'Advanced')}</span>
+                    <h2 style="margin:0;color:#111827;font-size:22px;font-weight:700;">${escHtml(sd.title)}</h2>
+                    <span style="font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">${(sd.category || 'TECH').toUpperCase()} · ${escHtml(sd.level || 'Advanced')}</span>
                 </div>
             </div>
-            <p style="font-size:14px;color:#cbd5e1;line-height:1.6;margin-bottom:16px;">${escHtml(sd.desc)}</p>
+            <p style="font-size:13.5px;color:#374151;line-height:1.55;margin-bottom:16px;">${escHtml(sd.desc)}</p>
             
-            <h4 style="color:#ffd166;margin:12px 0 6px;font-size:14px;">Key Skills & Frameworks</h4>
-            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+            <h4 style="color:#111827;margin:16px 0 8px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Key Skills & Frameworks</h4>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;">
                 ${(sd.skills || []).map((s) => `<span class="tsh-chip" style="font-size:12px;padding:4px 10px;">${escHtml(s)}</span>`).join('')}
             </div>
 
-            <h4 style="color:#ffd166;margin:12px 0 6px;font-size:14px;">Mudassir's Practical Experience</h4>
-            <div style="background:rgba(255,255,255,0.06);padding:12px 14px;border-radius:10px;border-left:3px solid #ffd166;font-size:13px;line-height:1.5;margin-bottom:16px;">
+            <h4 style="color:#111827;margin:16px 0 8px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Mudassir's Practical Experience</h4>
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:3.5px solid #0f172a;padding:12px 14px;border-radius:6px;font-size:13px;color:#1e293b;line-height:1.55;margin-bottom:16px;">
                 ${escHtml(sd.mudassirExp || '')}
             </div>
 
             ${(sd.projects && sd.projects.length > 0) ? `
-                <h4 style="color:#ffd166;margin:12px 0 6px;font-size:14px;">Applied in Projects</h4>
-                <ul style="margin:0;padding-left:20px;font-size:13px;color:#cbd5e1;line-height:1.6;">
-                    ${sd.projects.map((p) => `<li><span style="color:#fff;font-weight:600;">${escHtml(p)}</span></li>`).join('')}
+                <h4 style="color:#111827;margin:16px 0 8px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Applied in Projects</h4>
+                <ul style="margin:0;padding-left:20px;font-size:13px;color:#374151;line-height:1.6;">
+                    ${sd.projects.map((p) => `<li><span style="color:#111827;font-weight:600;">${escHtml(p)}</span></li>`).join('')}
                 </ul>
             ` : ''}
 
             <div style="margin-top:20px;text-align:right;">
-                <button type="button" id="studyOkBtn" style="background:#ffd166;color:#0f172a;border:none;padding:8px 18px;border-radius:8px;font-weight:700;cursor:pointer;">Got it! 👍</button>
+                <button type="button" id="studyOkBtn" style="background:#0f172a;color:#ffffff;border:1px solid #0f172a;padding:8px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Close</button>
             </div>
         </div>
     `;
@@ -1737,7 +1790,7 @@ function openStudyModal(sd) {
 }
 
 function handleE() {
-    if (activeStudyProp && mode === 'onfoot') {
+    if (activeStudyProp && mode === 'onfoot' && !hudDismissed) {
         openStudyModal(activeStudyProp.studyData);
         return;
     }
@@ -2141,6 +2194,8 @@ function handlePlayerPropCollision(dt, mx, mz, isMoving) {
             }
 
             if (prop.studyData) {
+                hudDismissed = false;
+                lastDismissedPropId = null;
                 activeStudyProp = prop;
                 renderTechStudyHUD(prop.studyData);
                 techStudyHUD.style.display = 'block';
@@ -2355,6 +2410,27 @@ function updateDynamicProps(dt, t) {
                 if (dot < 0) {
                     prop.vx -= 1.3 * dot * nx;
                     prop.vz -= 1.3 * dot * nz;
+                }
+            }
+        }
+        for (const d of islands) {
+            if (Math.hypot(prop.x - d.x, prop.z - d.z) > d.radius + 2) continue;
+            for (const s of d._solids || []) {
+                if (s.h) continue; // Walkable platform
+                const sx = d.x + s.x, sz = d.z + s.z;
+                const dx = prop.x - sx, dz = prop.z - sz;
+                const dist = Math.hypot(dx, dz);
+                const minDist = prop.radius + s.r;
+                if (dist < minDist && dist > 0.0001) {
+                    const pen = minDist - dist;
+                    const nx = dx / dist, nz = dz / dist;
+                    prop.x += nx * pen;
+                    prop.z += nz * pen;
+                    const dot = prop.vx * nx + prop.vz * nz;
+                    if (dot < 0) {
+                        prop.vx -= 1.3 * dot * nx;
+                        prop.vz -= 1.3 * dot * nz;
+                    }
                 }
             }
         }
@@ -2622,7 +2698,7 @@ function animate() {
             if (canDisembark() && findLanding()) eMsg = 'E · Go ashore 🧍';
         } else if (mode === 'onfoot') {
             spaceMsg = 'SPACE · Jump';
-            if (activeStudyProp) eMsg = `E · Study ${activeStudyProp.studyData.title} 📖`;
+            if (activeStudyProp && !hudDismissed) eMsg = `E · Study ${activeStudyProp.studyData.title} 📖`;
             else if (nearBoat()) eMsg = 'E · Board ship ⚓';
         }
 
@@ -2642,12 +2718,19 @@ function animate() {
         }
         if (currentNearStudy) {
             if (activeStudyProp !== currentNearStudy) {
+                if (lastDismissedPropId !== currentNearStudy.id) {
+                    hudDismissed = false;
+                }
                 activeStudyProp = currentNearStudy;
                 renderTechStudyHUD(currentNearStudy.studyData);
             }
-            techStudyHUD.style.display = 'block';
+            if (!hudDismissed) {
+                techStudyHUD.style.display = 'block';
+            }
         } else if (!activeStudyProp || Math.hypot(manGroup.position.x - activeStudyProp.x, manGroup.position.z - activeStudyProp.z) > 4.2) {
             activeStudyProp = null;
+            hudDismissed = false;
+            lastDismissedPropId = null;
             techStudyHUD.style.display = 'none';
         }
         setChip(spaceChip, spaceMsg);

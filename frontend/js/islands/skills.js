@@ -105,25 +105,14 @@ export default {
         const C_BLACK_SAND  = 0x36302a; // Natural volcanic mineral beach sand
         const C_PLATEAU     = 0x423932; // Main walking volcanic ash loam
 
-        // Deep basalt base (underwater bedrock shelf)
-        cyl(g, r * 1.05, r * 1.15, 3.2, C_BEDROCK, 0, 0.4, 0, { seg: 24, mat: { flatShading: false } });
+        // 1. Natural dark volcanic sand beach ring (top at exactly y = 2.0, matching islandSurface)
+        cyl(g, r * 0.9, r, 3.0, C_BLACK_SAND, 0, 0.5, 0, { seg: 28, mat: { flatShading: false } });
 
-        // Asymmetrical volcanic coastline & jagged sea cliffs
-        const coastAngles = [0, 0.5, 1.1, 1.8, 2.4, 3.0, 3.7, 4.3, 5.0, 5.6];
-        coastAngles.forEach((a, idx) => {
-            const rad = r * (0.88 + Math.sin(idx * 1.7) * 0.16);
-            const cx = Math.cos(a) * rad;
-            const cz = Math.sin(a) * rad;
-            const h = 2.6 + Math.cos(idx * 2.1) * 0.8;
-            const color = idx % 3 === 0 ? C_SCORIA_RED : (idx % 2 === 0 ? C_BASALT_DARK : C_TUFF_WARM);
-            cyl(g, 2.2 + (idx % 3) * 0.4, 2.8, h, color, cx, h / 2, cz, { seg: 8 });
-        });
+        // 2. Main walking volcanic plateau (top at exactly y = 2.95 PLAT, matching islandSurface)
+        cyl(g, r * 0.62, r * 0.74, 1.5, C_PLATEAU, 0, 2.2, 0, { seg: 28, mat: { flatShading: false } });
 
-        // Natural dark volcanic sand beach ring
-        cyl(g, r * 0.82, r * 0.96, 1.8, C_BLACK_SAND, 0, 1.6, 0, { seg: 26, mat: { flatShading: false } });
-
-        // Main walking volcanic plateau at PLAT (height 2.95)
-        cyl(g, r * 0.65, r * 0.78, 1.6, C_PLATEAU, 0, 2.2, 0, { seg: 24, mat: { flatShading: false } });
+        // 3. Submerged volcanic basalt bedrock (safely underwater)
+        cyl(g, r * 1.02, r * 1.1, 2.5, C_BEDROCK, 0, -0.6, 0, { seg: 24, mat: { flatShading: false } });
 
         // Variegated natural basalt flagstones & oxidized ironstone tiles on the plateau
         const tileColors = [0x5c392b, 0x4a423b, 0x564c42, 0x352e2a, 0x434a36]; // terracotta, basalt, pumice, obsidian, scorched lichen
@@ -139,61 +128,50 @@ export default {
             });
         }
 
-        // Stepped hexagonal basalt columns (Fingal's Cave / Giant's Causeway formation)
-        for (let j = 0; j < 14; j++) {
-            const ba = (j / 14) * Math.PI * 2 + 0.15;
-            const bx = Math.cos(ba) * (r * 0.76);
-            const bz = Math.sin(ba) * (r * 0.76);
-            // Leave opening for the lava river ocean cascade on south-west shore
-            if (bx > -2.5 && bx < 0.2 && bz > 6.0) continue;
-            const bh = 1.3 + (j % 5) * 0.45;
-            const colColor = j % 3 === 0 ? C_SCORIA_RED : (j % 2 === 0 ? C_BASALT_DARK : C_ASH_STONE);
-            const col = cyl(g, 0.75, 0.85, bh, colColor, bx, PLAT + bh / 2 - 0.4, bz, { seg: 6 });
-            // Iron-oxidized column cap
-            box(col, 0.7, 0.1, 0.7, 0x5a3c2e, 0, bh / 2, 0, { ry: 0.5 });
-        }
-
         // ====================================================================
         // 2. THE NATURAL STRATIFIED VOLCANO CONE & CALDERA
         // Multi-tiered geological strata with natural basalt, scoria, and tuff
+        // Positioned cleanly on the north plateau (vz = -3.8) with watertight collision
         // ====================================================================
         const vx = 0, vz = -3.8;
 
-        // Tier 1: Broad volcanic mountain base & scree slope
-        cyl(g, 5.8, 7.6, 2.0, C_BASALT_DARK, vx, PLAT + 1.0, vz, { seg: 14 });
+        // Tier 1: Broad volcanic mountain base (bottom radius 4.4, strictly within r = 4.8 collision)
+        cyl(g, 3.4, 4.4, 2.0, C_BASALT_DARK, vx, PLAT + 1.0, vz, { seg: 14 });
         // Tier 2: Lower mountain slope (weathered scoria)
-        cyl(g, 4.4, 6.0, 2.0, C_SCORIA_RED, vx, PLAT + 2.8, vz, { seg: 12 });
+        cyl(g, 2.4, 3.4, 2.0, C_SCORIA_RED, vx, PLAT + 2.8, vz, { seg: 12 });
         // Tier 3: Mid-caldera cone (oxidized terracotta tuff)
-        cyl(g, 3.2, 4.6, 2.2, C_TUFF_WARM, vx, PLAT + 4.8, vz, { seg: 10 });
+        cyl(g, 1.6, 2.4, 2.0, C_TUFF_WARM, vx, PLAT + 4.6, vz, { seg: 10 });
         // Tier 4: Upper cone (mineral ash & pumice band)
-        cyl(g, 2.2, 3.4, 1.8, C_ASH_STONE, vx, PLAT + 6.6, vz, { seg: 10 });
+        cyl(g, 1.2, 1.7, 1.8, C_ASH_STONE, vx, PLAT + 6.3, vz, { seg: 10 });
         // Tier 5: Caldera summit rim (rugged craggy basalt rim)
-        cyl(g, 1.7, 2.4, 1.4, 0x362c26, vx, PLAT + 7.8, vz, { seg: 12 });
+        cyl(g, 1.1, 1.4, 1.2, 0x362c26, vx, PLAT + 7.5, vz, { seg: 12 });
 
-        // 8 Radial volcanic ridges / buttresses (ribs formed by ancient hardened lava)
-        for (let rIdx = 0; rIdx < 8; rIdx++) {
-            const ra = (rIdx / 8) * Math.PI * 2;
-            // Leave south breach open for the primary lava cascade
-            if (ra > 1.1 && ra < 2.1) continue;
-            const rDist = 4.2;
+        // Natural volcanic crags behind the mountain (north side)
+        cyl(g, 0.9, 1.5, 3.0, C_BASALT_DARK, vx - 3.6, PLAT + 1.5, vz - 2.2, { seg: 8 });
+        cyl(g, 0.9, 1.5, 3.0, C_BASALT_DARK, vx + 3.6, PLAT + 1.5, vz - 2.2, { seg: 8 });
+
+        // Radial volcanic ribs formed by ancient hardened lava (within r = 3.6)
+        for (let rIdx = 0; rIdx < 6; rIdx++) {
+            const ra = (rIdx / 6) * Math.PI * 2;
+            if (ra > 1.0 && ra < 2.2) continue; // Leave south front open for lava cascade
+            const rDist = 2.6;
             const rx = vx + Math.cos(ra) * rDist;
             const rz = vz + Math.sin(ra) * rDist;
             const ridgeColor = rIdx % 2 === 0 ? C_SCORIA_RED : C_BASALT_DARK;
-            const ridge = box(g, 1.4, 3.2, 2.8, ridgeColor, rx, PLAT + 2.4, rz, {
+            box(g, 0.9, 2.2, 1.5, ridgeColor, rx, PLAT + 1.8, rz, {
                 ry: -ra + Math.PI / 2,
                 rx: 0.35,
             });
         }
 
         // Caldera summit crags & jagged rim teeth
-        for (let tIdx = 0; tIdx < 10; tIdx++) {
-            const ta = (tIdx / 10) * Math.PI * 2;
-            // Leave south rim notch open for lava overflow
-            if (ta > 1.2 && ta < 2.0) continue;
-            const tx = vx + Math.cos(ta) * 1.95;
-            const tz = vz + Math.sin(ta) * 1.95;
-            const toothH = 0.8 + (tIdx % 3) * 0.4;
-            cyl(g, 0.25, 0.55, toothH, 0x322822, tx, PLAT + 8.4 + toothH / 2, tz, { seg: 6 });
+        for (let tIdx = 0; tIdx < 8; tIdx++) {
+            const ta = (tIdx / 8) * Math.PI * 2;
+            if (ta > 1.1 && ta < 2.1) continue;
+            const tx = vx + Math.cos(ta) * 1.3;
+            const tz = vz + Math.sin(ta) * 1.3;
+            const toothH = 0.6 + (tIdx % 3) * 0.3;
+            cyl(g, 0.18, 0.38, toothH, 0x322822, tx, PLAT + 8.0 + toothH / 2, tz, { seg: 6 });
         }
 
         // ====================================================================
@@ -224,9 +202,9 @@ export default {
             shininess: 70,
         });
 
-        // 3A. SUMMIT CALDERA MAGMA LAKE (Boiling molten core at PLAT + 7.85)
-        const magmaLake = cyl(g, 1.85, 1.85, 0.3, 0xff4500, vx, PLAT + 7.82, vz, {
-            seg: 18,
+        // 3A. SUMMIT CALDERA MAGMA LAKE (Boiling molten core at PLAT + 7.52)
+        const magmaLake = cyl(g, 1.45, 1.45, 0.25, 0xff4500, vx, PLAT + 7.52, vz, {
+            seg: 16,
             material: poolMat,
         });
 
@@ -234,8 +212,8 @@ export default {
         const craterPlates = [];
         for (let cp = 0; cp < 4; cp++) {
             const cpa = (cp / 4) * Math.PI * 2;
-            const cpr = 0.8 + (cp % 2) * 0.4;
-            const plate = box(g, 0.75, 0.08, 0.7, 0x240903, vx + Math.cos(cpa) * cpr, PLAT + 7.98, vz + Math.sin(cpa) * cpr, {
+            const cpr = 0.65 + (cp % 2) * 0.35;
+            const plate = box(g, 0.6, 0.08, 0.55, 0x240903, vx + Math.cos(cpa) * cpr, PLAT + 7.66, vz + Math.sin(cpa) * cpr, {
                 ry: cpa + 0.4,
             });
             craterPlates.push({ mesh: plate, angle: cpa, dist: cpr, speed: 0.3 + cp * 0.1 });
@@ -244,50 +222,50 @@ export default {
         // Caldera magma bubbles that swell, pop, and reset
         const magmaBubbles = [];
         const bubbleLocs = [
-            { x: vx - 0.5, z: vz + 0.4, s: 1.4 },
-            { x: vx + 0.6, z: vz - 0.3, s: 1.1 },
-            { x: vx + 0.1, z: vz + 0.9, s: 1.6 },
-            { x: vx - 0.7, z: vz - 0.6, s: 1.3 },
+            { x: vx - 0.4, z: vz + 0.3, s: 1.4 },
+            { x: vx + 0.5, z: vz - 0.2, s: 1.1 },
+            { x: vx + 0.1, z: vz + 0.7, s: 1.6 },
+            { x: vx - 0.5, z: vz - 0.4, s: 1.3 },
         ];
         bubbleLocs.forEach((bDef, bIdx) => {
-            const bMesh = sph(g, 0.3, 0xff7b00, bDef.x, PLAT + 7.82, bDef.z, {
+            const bMesh = sph(g, 0.25, 0xff7b00, bDef.x, PLAT + 7.52, bDef.z, {
                 mat: { emissive: 0xff3300, emissiveIntensity: 1.6 },
             });
-            magmaBubbles.push({ mesh: bMesh, baseY: PLAT + 7.82, speed: bDef.s, offset: bIdx * 0.25 });
+            magmaBubbles.push({ mesh: bMesh, baseY: PLAT + 7.52, speed: bDef.s, offset: bIdx * 0.25 });
         });
 
         // 3B. MOUNTAIN LAVA CASCADE (Lava actively rushing down the volcano slope)
         // Upper steep chute descending from caldera rim notch down to mid-shelf
         const cascadeUpper = new THREE.Mesh(
-            new THREE.BoxGeometry(1.4, 0.2, 3.4),
+            new THREE.BoxGeometry(1.3, 0.18, 2.8),
             lavaMat
         );
-        cascadeUpper.position.set(vx + 0.05, PLAT + 6.3, vz + 2.1);
-        cascadeUpper.rotation.x = 0.68; // Angled down south face
+        cascadeUpper.position.set(vx, PLAT + 5.8, vz + 1.8);
+        cascadeUpper.rotation.x = 0.65; // Angled down south face
         g.add(cascadeUpper);
 
         // Mid-slope basalt plunge pool / shelf
         const shelfPool = new THREE.Mesh(
-            new THREE.BoxGeometry(1.8, 0.16, 1.4),
+            new THREE.BoxGeometry(1.5, 0.14, 1.0),
             lavaMat
         );
-        shelfPool.position.set(vx + 0.08, PLAT + 4.45, vz + 3.4);
+        shelfPool.position.set(vx, PLAT + 4.3, vz + 2.8);
         g.add(shelfPool);
 
         // Lower steep cascade plunging into the plateau base
         const cascadeLower = new THREE.Mesh(
-            new THREE.BoxGeometry(1.5, 0.2, 4.5),
+            new THREE.BoxGeometry(1.4, 0.18, 3.4),
             lavaMat
         );
-        cascadeLower.position.set(vx + 0.1, PLAT + 2.3, vz + 4.9);
-        cascadeLower.rotation.x = 0.58; // Sloping down to plateau
+        cascadeLower.position.set(vx, PLAT + 2.2, vz + 4.0);
+        cascadeLower.rotation.x = 0.55; // Sloping down to plateau
         g.add(cascadeLower);
 
         // Rock gorge walls framing the mountain lava cascade
-        [-0.9, 1.1].forEach((gOffset, gIdx) => {
-            box(g, 0.6, 1.4, 3.8, C_BASALT_DARK, vx + gOffset, PLAT + 2.5, vz + 4.8, {
-                rx: 0.58,
-                ry: gIdx === 0 ? 0.1 : -0.1,
+        [-0.8, 0.8].forEach((gOffset, gIdx) => {
+            box(g, 0.5, 1.2, 2.4, C_BASALT_DARK, vx + gOffset, PLAT + 1.8, vz + 3.4, {
+                rx: 0.55,
+                ry: gIdx === 0 ? 0.08 : -0.08,
             });
         });
 
@@ -295,26 +273,24 @@ export default {
         // Carved basalt river channel winding from mountain base, under the bridge, to southwest coast
         const riverSegments = [
             // Segment 1: Mountain base to bridge
-            { w: 1.4, h: 0.12, d: 2.2, x: 0.1, z: 0.1, ry: 0 },
+            { w: 1.3, h: 0.1, d: 2.0, x: 0.0, z: 1.4, ry: 0 },
             // Segment 2: Under bridge and center basin
-            { w: 1.4, h: 0.12, d: 2.4, x: 0.0, z: 2.2, ry: -0.15 },
-            // Segment 3: Curving towards southwest
-            { w: 1.4, h: 0.12, d: 2.8, x: -0.5, z: 4.4, ry: 0.32 },
-            // Segment 4: Reaching the coastal cliff edge
-            { w: 1.4, h: 0.12, d: 2.8, x: -1.3, z: 6.8, ry: 0.42 },
+            { w: 1.3, h: 0.1, d: 2.4, x: -0.4, z: 3.5, ry: 0.28 },
+            // Segment 3: Reaching the coastal cliff edge
+            { w: 1.3, h: 0.1, d: 2.6, x: -1.0, z: 5.8, ry: 0.38 },
         ];
         riverSegments.forEach((seg) => {
             const rMesh = new THREE.Mesh(
                 new THREE.BoxGeometry(seg.w, seg.h, seg.d),
                 lavaMat
             );
-            rMesh.position.set(seg.x, PLAT + 0.06, seg.z);
+            rMesh.position.set(seg.x, PLAT + 0.05, seg.z);
             if (seg.ry) rMesh.rotation.y = seg.ry;
             g.add(rMesh);
 
-            // Basalt boulder embankments on both river banks
-            box(g, 0.4, 0.3, seg.d * 0.9, C_BASALT_DARK, seg.x - seg.w * 0.58, PLAT + 0.15, seg.z, { ry: seg.ry });
-            box(g, 0.4, 0.3, seg.d * 0.9, C_SCORIA_RED, seg.x + seg.w * 0.58, PLAT + 0.15, seg.z, { ry: seg.ry });
+            // Subtle curb stones along river edges
+            box(g, 0.25, 0.12, seg.d * 0.9, C_BASALT_DARK, seg.x - seg.w * 0.54, PLAT + 0.06, seg.z, { ry: seg.ry });
+            box(g, 0.25, 0.12, seg.d * 0.9, C_SCORIA_RED, seg.x + seg.w * 0.54, PLAT + 0.06, seg.z, { ry: seg.ry });
         });
 
         // East flank secondary fissure stream
@@ -411,7 +387,7 @@ export default {
         // Warm glowing point lights for crater, river, and steam
         // ====================================================================
         const craterLight = new THREE.PointLight(0xff4d00, 2.6, 20);
-        craterLight.position.set(vx, PLAT + 8.6, vz);
+        craterLight.position.set(vx, PLAT + 8.0, vz);
         g.add(craterLight);
 
         const riverLight = new THREE.PointLight(0xff3700, 1.7, 12);
@@ -420,12 +396,17 @@ export default {
 
         // ====================================================================
         // 6. SOLID COLLISION BOUNDARIES
-        // Protects the mountain cone and major crags
+        // Completely encloses the mountain base, all rock crags, and platforms
+        // so Luffy CANNOT walk inside any rock geometry
         // ====================================================================
         S.push(
-            { x: vx, z: vz, r: 4.6 },             // Volcano caldera mountain core
-            { x: vx - 2.8, z: vz - 1.8, r: 1.8 }, // West volcanic crag
-            { x: vx + 2.8, z: vz - 1.8, r: 1.8 }  // East volcanic crag
+            // Main mountain caldera cone (base radius 4.4, collision radius 4.8 - watertight barrier)
+            { x: vx, z: vz, r: 4.8 },
+            // Rear crags north of the mountain
+            { x: vx - 3.6, z: vz - 2.2, r: 1.7 },
+            { x: vx + 3.6, z: vz - 2.2, r: 1.7 },
+            // Arched basalt footbridge (walkable platform at height 0.22)
+            { x: bridgeX, z: bridgeZ, r: 1.4, h: 0.22 }
         );
 
         // Carved volcanic stone signposts for the 3 Study Districts
