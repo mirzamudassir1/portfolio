@@ -1,164 +1,484 @@
 import * as THREE from 'three';
-import { PLAT, SAND, mat, add, box, cyl } from './helpers.js';
+import { PLAT, SAND, mat, add, box, cyl, cone, sph } from './helpers.js';
+
+// ============================================================================
+// DYNAMIC PROCEDURAL MAGMA TEXTURE GENERATOR
+// Creates animated, high-velocity glowing molten veins and cooling basalt crust
+// ============================================================================
+function createMagmaTexture(w = 256, h = 512, mode = 'flow') {
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+
+    // Incandescent molten base gradient (core yellow-orange to deep volcanic red)
+    const grad = ctx.createLinearGradient(0, 0, mode === 'flow' ? 0 : w, h);
+    grad.addColorStop(0.0, '#ff1a00');
+    grad.addColorStop(0.22, '#ff4d00');
+    grad.addColorStop(0.5, '#ff8000');
+    grad.addColorStop(0.78, '#ffaa00');
+    grad.addColorStop(1.0, '#ff2200');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    if (mode === 'flow') {
+        // High-velocity molten magma streaks and veins running along the Y axis
+        for (let i = 0; i < 34; i++) {
+            ctx.beginPath();
+            const sx = (i / 34) * w + (Math.sin(i * 3.7) * 8);
+            ctx.moveTo(sx, 0);
+            let cx = sx;
+            for (let y = 0; y <= h; y += 20) {
+                cx += Math.sin(y * 0.038 + i * 1.3) * 14 + Math.sin(i * 7 + y * 0.08) * 6;
+                ctx.lineTo(cx, y);
+            }
+            ctx.strokeStyle = i % 4 === 0 ? '#fffda8' : (i % 2 === 0 ? '#ffca28' : '#ff5722');
+            ctx.lineWidth = i % 4 === 0 ? 3.5 : (i % 2 === 0 ? 5.5 : 7.5);
+            ctx.stroke();
+        }
+
+        // Dark cooling basalt crust flakes (hardened volcanic crust floating on the current)
+        for (let c = 0; c < 48; c++) {
+            const cx = ((c * 43) % w);
+            const cy = ((c * 79) % h);
+            const rx = 4 + (c % 6) * 2;
+            const ry = 8 + (c % 9) * 3;
+            ctx.fillStyle = c % 2 === 0 ? '#260a03' : '#160502';
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, rx, ry, (c * 0.5), 0, Math.PI * 2);
+            ctx.fill();
+            // Glowing incandescent seam around crust chunks
+            ctx.strokeStyle = '#ff6d00';
+            ctx.lineWidth = 1.0;
+            ctx.stroke();
+        }
+    } else {
+        // Swirling convective magma cells for the caldera lake
+        const cx = w / 2;
+        const cy = h / 2;
+        for (let r = 12; r < w * 0.72; r += 16) {
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.strokeStyle = r % 32 === 0 ? '#fff380' : '#ff6a00';
+            ctx.lineWidth = 4 + (r % 4);
+            ctx.stroke();
+        }
+        for (let p = 0; p < 22; p++) {
+            const a = (p / 22) * Math.PI * 2;
+            const dist = 16 + (p % 4) * 22;
+            ctx.fillStyle = '#220802';
+            ctx.beginPath();
+            ctx.arc(cx + Math.cos(a) * dist, cy + Math.sin(a) * dist, 8 + (p % 5) * 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#ff7700';
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+        }
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(1, mode === 'flow' ? 3 : 1);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+}
 
 export default {
     customBase: true,
-    grass: 0x2b2730,
-    labelY: 23,
+    grass: 0x423932, // Natural volcanic loam / weathered ash earth
+    labelY: 24,
     build(g, r = 13, d = {}) {
         const S = [];
 
-        // ==========================================
-        // 1. UNIQUE VOLCANIC ISLAND LANDMASS & SHAPE
-        // ==========================================
-        // Deep obsidian base (underwater shelf)
-        cyl(g, r * 1.05, r * 1.15, 3.2, 0x141217, 0, 0.4, 0, { seg: 24, mat: { flatShading: false } });
+        // ====================================================================
+        // 1. NATURAL VOLCANIC COLOR PALETTE & ISLAND LANDMASS
+        // Real volcanoes feature weathered basalt, oxidized iron scoria,
+        // warm terracotta tuff, dark mineral ash, and basalt flagstones.
+        // ====================================================================
+        const C_BEDROCK     = 0x2e2724; // Submerged volcanic basalt shelf
+        const C_BASALT_DARK = 0x38312b; // Dark weathered basalt rock
+        const C_SCORIA_RED  = 0x583e30; // Oxidized iron volcanic scoria
+        const C_TUFF_WARM   = 0x694232; // Terracotta volcanic tuff
+        const C_ASH_STONE   = 0x4a433d; // Mineral ash stone & pumice
+        const C_BLACK_SAND  = 0x36302a; // Natural volcanic mineral beach sand
+        const C_PLATEAU     = 0x423932; // Main walking volcanic ash loam
 
-        // Asymmetrical volcanic coastline & jagged basalt headlands
+        // Deep basalt base (underwater bedrock shelf)
+        cyl(g, r * 1.05, r * 1.15, 3.2, C_BEDROCK, 0, 0.4, 0, { seg: 24, mat: { flatShading: false } });
+
+        // Asymmetrical volcanic coastline & jagged sea cliffs
         const coastAngles = [0, 0.5, 1.1, 1.8, 2.4, 3.0, 3.7, 4.3, 5.0, 5.6];
         coastAngles.forEach((a, idx) => {
             const rad = r * (0.88 + Math.sin(idx * 1.7) * 0.16);
             const cx = Math.cos(a) * rad;
             const cz = Math.sin(a) * rad;
             const h = 2.6 + Math.cos(idx * 2.1) * 0.8;
-            cyl(g, 2.2 + (idx % 3) * 0.4, 2.8, h, 0x1f1c24, cx, h / 2, cz, { seg: 8 });
+            const color = idx % 3 === 0 ? C_SCORIA_RED : (idx % 2 === 0 ? C_BASALT_DARK : C_TUFF_WARM);
+            cyl(g, 2.2 + (idx % 3) * 0.4, 2.8, h, color, cx, h / 2, cz, { seg: 8 });
         });
 
-        // Black volcanic sand beach ring
-        cyl(g, r * 0.82, r * 0.96, 1.8, 0x232028, 0, 1.6, 0, { seg: 26, mat: { flatShading: false } });
+        // Natural dark volcanic sand beach ring
+        cyl(g, r * 0.82, r * 0.96, 1.8, C_BLACK_SAND, 0, 1.6, 0, { seg: 26, mat: { flatShading: false } });
 
         // Main walking volcanic plateau at PLAT (height 2.95)
-        cyl(g, r * 0.65, r * 0.78, 1.6, 0x2e2a34, 0, 2.2, 0, { seg: 24, mat: { flatShading: false } });
+        cyl(g, r * 0.65, r * 0.78, 1.6, C_PLATEAU, 0, 2.2, 0, { seg: 24, mat: { flatShading: false } });
 
-        // Scorched stone tiles and basalt flagstones on the plateau
-        for (let i = 0; i < 16; i++) {
-            const pa = (i / 16) * Math.PI * 2;
-            const pDist = 3.2 + (i % 4) * 1.2;
+        // Variegated natural basalt flagstones & oxidized ironstone tiles on the plateau
+        const tileColors = [0x5c392b, 0x4a423b, 0x564c42, 0x352e2a, 0x434a36]; // terracotta, basalt, pumice, obsidian, scorched lichen
+        for (let i = 0; i < 20; i++) {
+            const pa = (i / 20) * Math.PI * 2;
+            const pDist = 3.0 + (i % 5) * 1.1;
             const px = Math.cos(pa) * pDist;
-            const pz = Math.sin(pa) * pDist + 0.8;
-            box(g, 1.8, 0.08, 1.8, (i % 2 === 0 ? 0x26232c : 0x35313d), px, PLAT + 0.04, pz, {
-                ry: pa + 0.2,
+            const pz = Math.sin(pa) * pDist + 0.6;
+            // Keep clear of the central lava river (x between -0.8 and 0.8, z > -1.0)
+            if (Math.abs(px) < 0.9 && pz > -0.5 && pz < 7.5) continue;
+            box(g, 1.6, 0.08, 1.6, tileColors[i % tileColors.length], px, PLAT + 0.04, pz, {
+                ry: pa + 0.25,
             });
         }
 
-        // Stepped hexagonal basalt columns along the island perimeter
-        for (let j = 0; j < 12; j++) {
-            const ba = (j / 12) * Math.PI * 2 + 0.2;
+        // Stepped hexagonal basalt columns (Fingal's Cave / Giant's Causeway formation)
+        for (let j = 0; j < 14; j++) {
+            const ba = (j / 14) * Math.PI * 2 + 0.15;
             const bx = Math.cos(ba) * (r * 0.76);
             const bz = Math.sin(ba) * (r * 0.76);
-            const bh = 1.2 + (j % 5) * 0.45;
-            cyl(g, 0.75, 0.85, bh, 0x1b1921, bx, PLAT + bh / 2 - 0.4, bz, { seg: 6 });
+            // Leave opening for the lava river ocean cascade on south-west shore
+            if (bx > -2.5 && bx < 0.2 && bz > 6.0) continue;
+            const bh = 1.3 + (j % 5) * 0.45;
+            const colColor = j % 3 === 0 ? C_SCORIA_RED : (j % 2 === 0 ? C_BASALT_DARK : C_ASH_STONE);
+            const col = cyl(g, 0.75, 0.85, bh, colColor, bx, PLAT + bh / 2 - 0.4, bz, { seg: 6 });
+            // Iron-oxidized column cap
+            box(col, 0.7, 0.1, 0.7, 0x5a3c2e, 0, bh / 2, 0, { ry: 0.5 });
         }
 
-        // ==========================================
-        // 2. THE SMOKING VOLCANO & MAGMA CRATER
-        // ==========================================
-        // Main volcanic caldera positioned toward the back (z = -3.8)
+        // ====================================================================
+        // 2. THE NATURAL STRATIFIED VOLCANO CONE & CALDERA
+        // Multi-tiered geological strata with natural basalt, scoria, and tuff
+        // ====================================================================
         const vx = 0, vz = -3.8;
 
-        // Broad volcanic mountain base
-        cyl(g, 3.8, 7.2, 3.8, 0x322d38, vx, PLAT + 1.9, vz, { seg: 12 });
-        // Rugged mid-caldera cone
-        cyl(g, 2.0, 4.4, 4.2, 0x26222c, vx, PLAT + 4.0, vz, { seg: 10 });
-        // Caldera rim summit
-        cyl(g, 1.5, 2.4, 2.5, 0x1c1921, vx, PLAT + 6.8, vz, { seg: 10 });
+        // Tier 1: Broad volcanic mountain base & scree slope
+        cyl(g, 5.8, 7.6, 2.0, C_BASALT_DARK, vx, PLAT + 1.0, vz, { seg: 14 });
+        // Tier 2: Lower mountain slope (weathered scoria)
+        cyl(g, 4.4, 6.0, 2.0, C_SCORIA_RED, vx, PLAT + 2.8, vz, { seg: 12 });
+        // Tier 3: Mid-caldera cone (oxidized terracotta tuff)
+        cyl(g, 3.2, 4.6, 2.2, C_TUFF_WARM, vx, PLAT + 4.8, vz, { seg: 10 });
+        // Tier 4: Upper cone (mineral ash & pumice band)
+        cyl(g, 2.2, 3.4, 1.8, C_ASH_STONE, vx, PLAT + 6.6, vz, { seg: 10 });
+        // Tier 5: Caldera summit rim (rugged craggy basalt rim)
+        cyl(g, 1.7, 2.4, 1.4, 0x362c26, vx, PLAT + 7.8, vz, { seg: 12 });
 
-        // Glowing molten magma pool in the caldera crater
-        cyl(g, 1.55, 1.55, 0.25, 0xff4500, vx, PLAT + 7.85, vz, {
-            seg: 12,
-            mat: { emissive: 0xff3700, emissiveIntensity: 1.2 },
+        // 8 Radial volcanic ridges / buttresses (ribs formed by ancient hardened lava)
+        for (let rIdx = 0; rIdx < 8; rIdx++) {
+            const ra = (rIdx / 8) * Math.PI * 2;
+            // Leave south breach open for the primary lava cascade
+            if (ra > 1.1 && ra < 2.1) continue;
+            const rDist = 4.2;
+            const rx = vx + Math.cos(ra) * rDist;
+            const rz = vz + Math.sin(ra) * rDist;
+            const ridgeColor = rIdx % 2 === 0 ? C_SCORIA_RED : C_BASALT_DARK;
+            const ridge = box(g, 1.4, 3.2, 2.8, ridgeColor, rx, PLAT + 2.4, rz, {
+                ry: -ra + Math.PI / 2,
+                rx: 0.35,
+            });
+        }
+
+        // Caldera summit crags & jagged rim teeth
+        for (let tIdx = 0; tIdx < 10; tIdx++) {
+            const ta = (tIdx / 10) * Math.PI * 2;
+            // Leave south rim notch open for lava overflow
+            if (ta > 1.2 && ta < 2.0) continue;
+            const tx = vx + Math.cos(ta) * 1.95;
+            const tz = vz + Math.sin(ta) * 1.95;
+            const toothH = 0.8 + (tIdx % 3) * 0.4;
+            cyl(g, 0.25, 0.55, toothH, 0x322822, tx, PLAT + 8.4 + toothH / 2, tz, { seg: 6 });
+        }
+
+        // ====================================================================
+        // 3. RUNNING LAVA SYSTEM: CALDERA, CASCADES, RIVER & OCEAN FALL
+        // Molten lava streams with animated scrolling UV textures and emissive glow
+        // ====================================================================
+        const flowTex = createMagmaTexture(256, 512, 'flow');
+        const poolTex = createMagmaTexture(256, 256, 'pool');
+
+        // Dynamic molten materials
+        const lavaMat = new THREE.MeshPhongMaterial({
+            color: 0xff3b00,
+            emissive: 0xff2800,
+            emissiveIntensity: 1.4,
+            map: flowTex,
+            emissiveMap: flowTex,
+            flatShading: true,
+            shininess: 60,
         });
 
-        // Glowing magma channels / lava falls flowing from the volcano down into the plateau
-        const lavaStream = new THREE.Mesh(
-            new THREE.BoxGeometry(0.85, 0.12, 5.2),
-            new THREE.MeshPhongMaterial({
-                color: 0xff4500,
-                emissive: 0xff3700,
-                emissiveIntensity: 1.1,
-                flatShading: true,
-            })
-        );
-        lavaStream.position.set(vx + 0.2, PLAT + 0.06, vz + 3.2);
-        lavaStream.rotation.y = 0.12;
-        g.add(lavaStream);
+        const poolMat = new THREE.MeshPhongMaterial({
+            color: 0xff4d00,
+            emissive: 0xff3000,
+            emissiveIntensity: 1.45,
+            map: poolTex,
+            emissiveMap: poolTex,
+            flatShading: true,
+            shininess: 70,
+        });
 
-        // Branching magma veins in the stone floor
-        [-2.4, 2.2].forEach((offset, idx) => {
-            const vein = new THREE.Mesh(
-                new THREE.BoxGeometry(0.35, 0.08, 4.2),
-                new THREE.MeshPhongMaterial({
-                    color: 0xff5500,
-                    emissive: 0xff3b00,
-                    emissiveIntensity: 0.95,
-                })
+        // 3A. SUMMIT CALDERA MAGMA LAKE (Boiling molten core at PLAT + 7.85)
+        const magmaLake = cyl(g, 1.85, 1.85, 0.3, 0xff4500, vx, PLAT + 7.82, vz, {
+            seg: 18,
+            material: poolMat,
+        });
+
+        // Floating cooled basalt crust plates in the crater
+        const craterPlates = [];
+        for (let cp = 0; cp < 4; cp++) {
+            const cpa = (cp / 4) * Math.PI * 2;
+            const cpr = 0.8 + (cp % 2) * 0.4;
+            const plate = box(g, 0.75, 0.08, 0.7, 0x240903, vx + Math.cos(cpa) * cpr, PLAT + 7.98, vz + Math.sin(cpa) * cpr, {
+                ry: cpa + 0.4,
+            });
+            craterPlates.push({ mesh: plate, angle: cpa, dist: cpr, speed: 0.3 + cp * 0.1 });
+        }
+
+        // Caldera magma bubbles that swell, pop, and reset
+        const magmaBubbles = [];
+        const bubbleLocs = [
+            { x: vx - 0.5, z: vz + 0.4, s: 1.4 },
+            { x: vx + 0.6, z: vz - 0.3, s: 1.1 },
+            { x: vx + 0.1, z: vz + 0.9, s: 1.6 },
+            { x: vx - 0.7, z: vz - 0.6, s: 1.3 },
+        ];
+        bubbleLocs.forEach((bDef, bIdx) => {
+            const bMesh = sph(g, 0.3, 0xff7b00, bDef.x, PLAT + 7.82, bDef.z, {
+                mat: { emissive: 0xff3300, emissiveIntensity: 1.6 },
+            });
+            magmaBubbles.push({ mesh: bMesh, baseY: PLAT + 7.82, speed: bDef.s, offset: bIdx * 0.25 });
+        });
+
+        // 3B. MOUNTAIN LAVA CASCADE (Lava actively rushing down the volcano slope)
+        // Upper steep chute descending from caldera rim notch down to mid-shelf
+        const cascadeUpper = new THREE.Mesh(
+            new THREE.BoxGeometry(1.4, 0.2, 3.4),
+            lavaMat
+        );
+        cascadeUpper.position.set(vx + 0.05, PLAT + 6.3, vz + 2.1);
+        cascadeUpper.rotation.x = 0.68; // Angled down south face
+        g.add(cascadeUpper);
+
+        // Mid-slope basalt plunge pool / shelf
+        const shelfPool = new THREE.Mesh(
+            new THREE.BoxGeometry(1.8, 0.16, 1.4),
+            lavaMat
+        );
+        shelfPool.position.set(vx + 0.08, PLAT + 4.45, vz + 3.4);
+        g.add(shelfPool);
+
+        // Lower steep cascade plunging into the plateau base
+        const cascadeLower = new THREE.Mesh(
+            new THREE.BoxGeometry(1.5, 0.2, 4.5),
+            lavaMat
+        );
+        cascadeLower.position.set(vx + 0.1, PLAT + 2.3, vz + 4.9);
+        cascadeLower.rotation.x = 0.58; // Sloping down to plateau
+        g.add(cascadeLower);
+
+        // Rock gorge walls framing the mountain lava cascade
+        [-0.9, 1.1].forEach((gOffset, gIdx) => {
+            box(g, 0.6, 1.4, 3.8, C_BASALT_DARK, vx + gOffset, PLAT + 2.5, vz + 4.8, {
+                rx: 0.58,
+                ry: gIdx === 0 ? 0.1 : -0.1,
+            });
+        });
+
+        // 3C. WINDING PLATEAU LAVA RIVER
+        // Carved basalt river channel winding from mountain base, under the bridge, to southwest coast
+        const riverSegments = [
+            // Segment 1: Mountain base to bridge
+            { w: 1.4, h: 0.12, d: 2.2, x: 0.1, z: 0.1, ry: 0 },
+            // Segment 2: Under bridge and center basin
+            { w: 1.4, h: 0.12, d: 2.4, x: 0.0, z: 2.2, ry: -0.15 },
+            // Segment 3: Curving towards southwest
+            { w: 1.4, h: 0.12, d: 2.8, x: -0.5, z: 4.4, ry: 0.32 },
+            // Segment 4: Reaching the coastal cliff edge
+            { w: 1.4, h: 0.12, d: 2.8, x: -1.3, z: 6.8, ry: 0.42 },
+        ];
+        riverSegments.forEach((seg) => {
+            const rMesh = new THREE.Mesh(
+                new THREE.BoxGeometry(seg.w, seg.h, seg.d),
+                lavaMat
             );
-            vein.position.set(offset, PLAT + 0.05, 1.8 + idx * 0.8);
-            vein.rotation.y = (idx === 0 ? 0.35 : -0.32);
-            g.add(vein);
+            rMesh.position.set(seg.x, PLAT + 0.06, seg.z);
+            if (seg.ry) rMesh.rotation.y = seg.ry;
+            g.add(rMesh);
+
+            // Basalt boulder embankments on both river banks
+            box(g, 0.4, 0.3, seg.d * 0.9, C_BASALT_DARK, seg.x - seg.w * 0.58, PLAT + 0.15, seg.z, { ry: seg.ry });
+            box(g, 0.4, 0.3, seg.d * 0.9, C_SCORIA_RED, seg.x + seg.w * 0.58, PLAT + 0.15, seg.z, { ry: seg.ry });
         });
 
-        // Arched basalt bridge over the main lava river
-        const bridge = box(g, 2.4, 0.28, 1.4, 0x3d3744, vx + 0.2, PLAT + 0.25, vz + 3.2);
-        box(bridge, 2.6, 0.3, 0.15, 0x221f28, 0, 0.25, 0.65);
-        box(bridge, 2.6, 0.3, 0.15, 0x221f28, 0, 0.25, -0.65);
-
-        // Volcanic rock spire crags & solid collision boundaries
-        S.push(
-            { x: vx, z: vz, r: 4.8 },       // Volcano caldera mountain body
-            { x: vx - 2.8, z: vz - 1.8, r: 1.8 }, // West volcanic crag
-            { x: vx + 2.8, z: vz - 1.8, r: 1.8 }  // East volcanic crag
+        // East flank secondary fissure stream
+        const eastFissure = new THREE.Mesh(
+            new THREE.BoxGeometry(0.55, 0.1, 4.2),
+            lavaMat
         );
+        eastFissure.position.set(2.4, PLAT + 0.05, 1.2);
+        eastFissure.rotation.y = -0.42;
+        g.add(eastFissure);
 
-        // Volcanic stone signposts for the 3 Study Districts
-        const signLang = box(g, 1.2, 0.1, 0.5, 0x1e1c24, -4.8, PLAT + 0.9, 0.2);
-        box(signLang, 0.15, 0.9, 0.15, 0x3a3542, 0, -0.45, 0);
-        const signLib = box(g, 1.2, 0.1, 0.5, 0x1e1c24, 0, PLAT + 0.9, 0.8);
-        box(signLib, 0.15, 0.9, 0.15, 0x3a3542, 0, -0.45, 0);
-        const signTech = box(g, 1.2, 0.1, 0.5, 0x1e1c24, 4.8, PLAT + 0.9, 0.2);
-        box(signTech, 0.15, 0.9, 0.15, 0x3a3542, 0, -0.45, 0);
+        // 3D. OCEAN LAVA CASCADE (Molten lava plunging into the sea)
+        // Plunges from the southwest island cliff (PLAT) down to water level (y = 0.2)
+        const oceanLavaFall = new THREE.Mesh(
+            new THREE.BoxGeometry(1.5, 0.2, 3.4),
+            lavaMat
+        );
+        const oceanX = -1.9, oceanZ = 8.8;
+        oceanLavaFall.position.set(oceanX, PLAT * 0.48, oceanZ);
+        oceanLavaFall.rotation.x = 0.95; // Steep waterfall angle into sea
+        oceanLavaFall.rotation.y = 0.38;
+        g.add(oceanLavaFall);
 
-        // ==========================================
-        // 3. ANIMATED VOLCANIC PARTICLES & SMOKE
-        // ==========================================
-        const smokeClouds = [];
-        for (let i = 0; i < 9; i++) {
+        // Boiling ocean water foam ring where lava strikes the sea
+        const oceanFoamRing = cyl(g, 1.8, 1.8, 0.08, 0xffedd0, oceanX - 0.2, 0.15, oceanZ + 1.2, {
+            seg: 18,
+            mat: { transparent: true, opacity: 0.72 },
+        });
+
+        // Thermal ocean steam plume (billowing white/grey steam clouds rising from the ocean clash)
+        const oceanSteamPuffs = [];
+        for (let os = 0; os < 8; os++) {
             const sm = new THREE.Mesh(
-                new THREE.SphereGeometry(0.8 + (i % 3) * 0.3, 9, 8),
+                new THREE.SphereGeometry(0.4 + (os % 3) * 0.18, 8, 6),
                 new THREE.MeshPhongMaterial({
-                    color: i % 2 === 0 ? 0x4a4650 : 0x6e6878,
+                    color: 0xf2f0ed,
                     transparent: true,
                     opacity: 0.5,
                     flatShading: true,
                 })
             );
-            sm.position.set(vx, PLAT + 7.8, vz);
+            sm.position.set(oceanX, 0.3, oceanZ + 1.0);
+            g.add(sm);
+            oceanSteamPuffs.push({
+                mesh: sm,
+                offset: os / 8,
+                driftAngle: os * 1.8,
+            });
+        }
+
+        // Glowing molten splash embers jumping from the water collision
+        const oceanSparks = [];
+        for (let sp = 0; sp < 5; sp++) {
+            const spark = new THREE.Mesh(
+                new THREE.OctahedronGeometry(0.14, 0),
+                new THREE.MeshBasicMaterial({ color: 0xffaa00 })
+            );
+            g.add(spark);
+            oceanSparks.push({
+                mesh: spark,
+                dx: Math.cos(sp * 1.3) * 0.9,
+                dz: Math.sin(sp * 1.3) * 0.9,
+                speed: 1.8 + sp * 0.4,
+                offset: sp * 0.2,
+            });
+        }
+
+        // ====================================================================
+        // 4. NATURAL BASALT ARCHED BRIDGE OVER THE LAVA RIVER
+        // Lets Luffy safely cross between Languages (West) and Libraries/Tools (East)
+        // ====================================================================
+        const bridgeX = 0.05, bridgeZ = 1.1;
+        const bridgeArch = box(g, 3.2, 0.35, 1.8, 0x4a423b, bridgeX, PLAT + 0.25, bridgeZ);
+        // Approach ramps on West & East banks
+        box(g, 0.9, 0.22, 1.7, 0x3d352e, bridgeX - 1.8, PLAT + 0.12, bridgeZ, { rz: 0.12 });
+        box(g, 0.9, 0.22, 1.7, 0x3d352e, bridgeX + 1.8, PLAT + 0.12, bridgeZ, { rz: -0.12 });
+        // Heavy volcanic basalt railings
+        box(bridgeArch, 3.4, 0.4, 0.16, 0x322b26, 0, 0.32, 0.82);
+        box(bridgeArch, 3.4, 0.4, 0.16, 0x322b26, 0, 0.32, -0.82);
+
+        // Glowing volcanic amber crystal lanterns on the 4 bridge corners
+        [
+            { x: -1.4, z: 0.8 }, { x: 1.4, z: 0.8 },
+            { x: -1.4, z: -0.8 }, { x: 1.4, z: -0.8 },
+        ].forEach((lPost) => {
+            cyl(bridgeArch, 0.08, 0.1, 0.65, 0x2e2722, lPost.x, 0.5, lPost.z, { seg: 6 });
+            sph(bridgeArch, 0.16, 0xffc107, lPost.x, 0.9, lPost.z, {
+                mat: { emissive: 0xff9800, emissiveIntensity: 1.3 },
+            });
+        });
+
+        // ====================================================================
+        // 5. VOLCANIC DYNAMIC LIGHTING
+        // Warm glowing point lights for crater, river, and steam
+        // ====================================================================
+        const craterLight = new THREE.PointLight(0xff4d00, 2.6, 20);
+        craterLight.position.set(vx, PLAT + 8.6, vz);
+        g.add(craterLight);
+
+        const riverLight = new THREE.PointLight(0xff3700, 1.7, 12);
+        riverLight.position.set(bridgeX, PLAT + 1.1, bridgeZ);
+        g.add(riverLight);
+
+        // ====================================================================
+        // 6. SOLID COLLISION BOUNDARIES
+        // Protects the mountain cone and major crags
+        // ====================================================================
+        S.push(
+            { x: vx, z: vz, r: 4.6 },             // Volcano caldera mountain core
+            { x: vx - 2.8, z: vz - 1.8, r: 1.8 }, // West volcanic crag
+            { x: vx + 2.8, z: vz - 1.8, r: 1.8 }  // East volcanic crag
+        );
+
+        // Carved volcanic stone signposts for the 3 Study Districts
+        const signLang = box(g, 1.3, 0.12, 0.5, 0x483a31, -4.8, PLAT + 0.9, 0.2);
+        box(signLang, 0.14, 0.9, 0.14, 0x2e241f, 0, -0.45, 0);
+        const signLib = box(g, 1.3, 0.12, 0.5, 0x483a31, 0, PLAT + 0.9, -0.7);
+        box(signLib, 0.14, 0.9, 0.14, 0x2e241f, 0, -0.45, 0);
+        const signTech = box(g, 1.3, 0.12, 0.5, 0x483a31, 4.8, PLAT + 0.9, 0.2);
+        box(signTech, 0.14, 0.9, 0.14, 0x2e241f, 0, -0.45, 0);
+
+        // ====================================================================
+        // 7. CALDERA SMOKE COLUMN & MAGMA EMBERS
+        // Billowing volcanic smoke column rising high into the sky
+        // ====================================================================
+        const smokeClouds = [];
+        for (let i = 0; i < 11; i++) {
+            const sm = new THREE.Mesh(
+                new THREE.SphereGeometry(0.85 + (i % 3) * 0.35, 9, 8),
+                new THREE.MeshPhongMaterial({
+                    color: i % 2 === 0 ? 0x4f4945 : 0x68615c,
+                    transparent: true,
+                    opacity: 0.52,
+                    flatShading: true,
+                })
+            );
+            sm.position.set(vx, PLAT + 8.2, vz);
             g.add(sm);
             smokeClouds.push(sm);
         }
 
         // Floating glowing magma ember motes
         const embers = [];
-        for (let e = 0; e < 6; e++) {
+        for (let e = 0; e < 8; e++) {
             const em = new THREE.Mesh(
-                new THREE.OctahedronGeometry(0.22, 0),
-                new THREE.MeshBasicMaterial({ color: 0xff7b00 })
+                new THREE.OctahedronGeometry(0.2, 0),
+                new THREE.MeshBasicMaterial({ color: 0xff8c00 })
             );
             g.add(em);
             embers.push({
                 mesh: em,
-                angle: (e / 6) * Math.PI * 2,
-                dist: 1.2 + (e % 3) * 0.8,
+                angle: (e / 8) * Math.PI * 2,
+                dist: 1.1 + (e % 3) * 0.8,
                 speed: 1.2 + e * 0.2,
-                baseY: PLAT + 7.2,
+                baseY: PLAT + 7.8,
             });
         }
 
-        // ==========================================
-        // 4. THE 12 PUSHABLE TECH STUDY BLOCKS
-        // ==========================================
+        // ====================================================================
+        // 8. THE 12 PUSHABLE TECH STUDY BLOCKS
+        // Branded, pushable physics blocks with interactive study knowledge
+        // ====================================================================
         const pushableTechProps = [
-            // --- A. PROGRAMMING LANGUAGES (Left Caldera Terrace) ---
+            // --- A. PROGRAMMING LANGUAGES (Left Volcanic Terrace) ---
             {
                 type: 'box',
                 id: 'tech_python',
@@ -168,7 +488,7 @@ export default {
                 color: 0x3776ab,
                 w: 1.0, h: 1.0, d: 1.0,
                 mass: 1.0,
-                x: -5.2, y: PLAT + 0.52, z: 1.8,
+                x: -4.8, y: PLAT + 0.52, z: 1.6,
                 studyData: {
                     title: 'Python',
                     icon: '🐍',
@@ -189,7 +509,7 @@ export default {
                 color: 0xf7df1e,
                 w: 1.0, h: 1.0, d: 1.0,
                 mass: 1.0,
-                x: -3.6, y: PLAT + 0.52, z: 2.8,
+                x: -3.4, y: PLAT + 0.52, z: 2.7,
                 studyData: {
                     title: 'JavaScript (ES6+)',
                     icon: '⚡',
@@ -210,7 +530,7 @@ export default {
                 color: 0x3178c6,
                 w: 0.95, h: 0.95, d: 0.95,
                 mass: 1.0,
-                x: -4.8, y: PLAT + 0.5, z: 4.0,
+                x: -4.8, y: PLAT + 0.5, z: 3.9,
                 studyData: {
                     title: 'TypeScript',
                     icon: '🔷',
@@ -231,7 +551,7 @@ export default {
                 color: 0x00599c,
                 w: 0.95, h: 0.95, d: 0.95,
                 mass: 1.1,
-                x: -3.2, y: PLAT + 0.5, z: 4.9,
+                x: -3.4, y: PLAT + 0.5, z: 5.1,
                 studyData: {
                     title: 'C / C++',
                     icon: '⚙️',
@@ -244,7 +564,7 @@ export default {
                 },
             },
 
-            // --- B. FRAMEWORKS & LIBRARIES (Center Magma Basin Plaza) ---
+            // --- B. FRAMEWORKS & LIBRARIES (Center Lava Basin Banks) ---
             {
                 type: 'box',
                 id: 'tech_react',
@@ -254,7 +574,7 @@ export default {
                 color: 0x61dafb,
                 w: 1.0, h: 1.0, d: 1.0,
                 mass: 1.0,
-                x: -1.2, y: PLAT + 0.52, z: 2.5,
+                x: -1.5, y: PLAT + 0.52, z: 2.4,
                 studyData: {
                     title: 'React.js',
                     icon: '⚛️',
@@ -268,27 +588,6 @@ export default {
             },
             {
                 type: 'box',
-                id: 'tech_nodejs',
-                label: 'NODE.JS',
-                icon: '🟢',
-                category: 'Libraries',
-                color: 0x68a063,
-                w: 1.0, h: 1.0, d: 1.0,
-                mass: 1.0,
-                x: 0.8, y: PLAT + 0.52, z: 3.2,
-                studyData: {
-                    title: 'Node.js',
-                    icon: '🟢',
-                    category: 'Backend Runtime',
-                    level: 'Advanced / Core Stack',
-                    desc: 'V8-powered asynchronous non-blocking event-driven runtime powering scalable microservices, background jobs, and RESTful servers.',
-                    skills: ['Event Loop', 'Stream Pipelines', 'File System API', 'Cluster Management', 'NPM Tooling', 'Process Architecture'],
-                    mudassirExp: 'Engineered the backend serving this 3D portfolio with multi-layered asset streaming, fallback data safety, and fast startup.',
-                    projects: ['Portfolio Backend Daemon', 'QuizPro Backend API', 'Authentication Microservice'],
-                },
-            },
-            {
-                type: 'box',
                 id: 'tech_express',
                 label: 'EXPRESS',
                 icon: '🚂',
@@ -296,7 +595,7 @@ export default {
                 color: 0xffffff,
                 w: 0.95, h: 0.95, d: 0.95,
                 mass: 1.0,
-                x: -0.7, y: PLAT + 0.5, z: 4.8,
+                x: -1.5, y: PLAT + 0.5, z: 4.1,
                 studyData: {
                     title: 'Express.js',
                     icon: '🚂',
@@ -317,7 +616,7 @@ export default {
                 color: 0x00f0ff,
                 w: 1.0, h: 1.0, d: 1.0,
                 mass: 1.0,
-                x: 1.1, y: PLAT + 0.52, z: 2.1,
+                x: 1.5, y: PLAT + 0.52, z: 2.1,
                 studyData: {
                     title: 'Three.js / WebGL',
                     icon: '🌐',
@@ -329,8 +628,29 @@ export default {
                     projects: ['3D Sailing Pirate Portfolio', 'Procedural Ocean Simulation', 'Physics Prop Sandbox'],
                 },
             },
+            {
+                type: 'box',
+                id: 'tech_nodejs',
+                label: 'NODE.JS',
+                icon: '🟢',
+                category: 'Libraries',
+                color: 0x68a063,
+                w: 1.0, h: 1.0, d: 1.0,
+                mass: 1.0,
+                x: 1.5, y: PLAT + 0.52, z: 3.6,
+                studyData: {
+                    title: 'Node.js',
+                    icon: '🟢',
+                    category: 'Backend Runtime',
+                    level: 'Advanced / Core Stack',
+                    desc: 'V8-powered asynchronous non-blocking event-driven runtime powering scalable microservices, background jobs, and RESTful servers.',
+                    skills: ['Event Loop', 'Stream Pipelines', 'File System API', 'Cluster Management', 'NPM Tooling', 'Process Architecture'],
+                    mudassirExp: 'Engineered the backend serving this 3D portfolio with multi-layered asset streaming, fallback data safety, and fast startup.',
+                    projects: ['Portfolio Backend Daemon', 'QuizPro Backend API', 'Authentication Microservice'],
+                },
+            },
 
-            // --- C. DATABASES, TOOLS & AI (Right Basalt Terraces) ---
+            // --- C. DATABASES, TOOLS & AI (Right Volcanic Terraces) ---
             {
                 type: 'box',
                 id: 'tech_mongodb',
@@ -403,7 +723,7 @@ export default {
                 color: 0xff6b35,
                 w: 0.95, h: 0.95, d: 0.95,
                 mass: 1.0,
-                x: 4.7, y: PLAT + 0.5, z: 4.8,
+                x: 4.7, y: PLAT + 0.5, z: 4.9,
                 studyData: {
                     title: 'RESTful APIs & WebSockets',
                     icon: '🔌',
@@ -421,26 +741,88 @@ export default {
             solids: S,
             props: pushableTechProps,
             update: (t) => {
-                // Animate billowing volcanic smoke clouds
+                // 1. RUNNING LAVA DYNAMICS (Continuous downward flow offset)
+                if (flowTex) {
+                    flowTex.offset.y = -(t * 0.45) % 1; // Lava streams rush downwards!
+                }
+                if (poolTex) {
+                    poolTex.offset.x = (t * 0.08) % 1;
+                    poolTex.offset.y = Math.sin(t * 0.3) * 0.08;
+                }
+
+                // Pulsating emissive magma heat
+                const pulse = 1.35 + Math.sin(t * 3.8) * 0.25;
+                lavaMat.emissiveIntensity = pulse;
+                poolMat.emissiveIntensity = 1.4 + Math.sin(t * 2.8 + 1.0) * 0.22;
+
+                // 2. MAGMA BUBBLES IN CALDERA (Rise, expand, pop)
+                magmaBubbles.forEach((b) => {
+                    const cycle = (t * b.speed + b.offset) % 1;
+                    const popY = Math.sin(cycle * Math.PI);
+                    b.mesh.position.y = b.baseY + popY * 0.25;
+                    b.mesh.scale.setScalar(0.4 + popY * 0.85);
+                });
+
+                // 3. DRIFTING CRATER CRUST PLATES
+                craterPlates.forEach((cp) => {
+                    const curA = cp.angle + t * cp.speed * 0.2;
+                    cp.mesh.position.x = vx + Math.cos(curA) * cp.dist;
+                    cp.mesh.position.z = vz + Math.sin(curA) * cp.dist;
+                    cp.mesh.rotation.y = curA + 0.5;
+                });
+
+                // 4. THERMAL OCEAN STEAM PUFFS (Billow upward where lava hits sea)
+                oceanSteamPuffs.forEach((st) => {
+                    const cycle = (t * 0.65 + st.offset) % 1;
+                    const spread = cycle * 0.9;
+                    st.mesh.position.set(
+                        oceanX - 0.2 + Math.cos(st.driftAngle) * spread,
+                        0.25 + cycle * 3.2,
+                        oceanZ + 1.1 + Math.sin(st.driftAngle) * spread - cycle * 0.4
+                    );
+                    st.mesh.scale.setScalar(0.6 + cycle * 2.4);
+                    st.mesh.material.opacity = Math.max(0, 0.52 * (1 - cycle));
+                });
+
+                // Pulsing ocean water boiling foam ring
+                const foamPulse = 1.0 + Math.sin(t * 4.5) * 0.12;
+                oceanFoamRing.scale.set(foamPulse, 1, foamPulse);
+
+                // Ocean molten splash sparks
+                oceanSparks.forEach((sp) => {
+                    const cycle = (t * sp.speed + sp.offset) % 1;
+                    const arcY = Math.sin(cycle * Math.PI) * 0.9;
+                    sp.mesh.position.set(
+                        oceanX - 0.2 + sp.dx * cycle,
+                        0.25 + arcY,
+                        oceanZ + 1.1 + sp.dz * cycle
+                    );
+                });
+
+                // 5. FLICKERING VOLCANIC LIGHTING
+                craterLight.intensity = 2.5 + Math.sin(t * 7.5) * 0.35 + Math.cos(t * 12.0) * 0.2;
+                riverLight.intensity = 1.6 + Math.sin(t * 6.0 + 1.5) * 0.25;
+
+                // 6. BILLOWING VOLCANIC SMOKE COLUMN
                 smokeClouds.forEach((sm, idx) => {
-                    const cycle = (t * 0.22 + idx / smokeClouds.length) % 1;
-                    const driftAngle = idx * 1.7 + t * 0.15;
-                    const driftR = cycle * 2.2;
+                    const cycle = (t * 0.2 + idx / smokeClouds.length) % 1;
+                    const driftAngle = idx * 1.6 + t * 0.12;
+                    const driftR = cycle * 2.4;
                     sm.position.set(
                         vx + Math.cos(driftAngle) * driftR,
-                        PLAT + 7.8 + cycle * 7.5,
-                        vz + Math.sin(driftAngle) * driftR - cycle * 1.8
+                        PLAT + 8.2 + cycle * 8.2,
+                        vz + Math.sin(driftAngle) * driftR - cycle * 2.0
                     );
-                    sm.scale.setScalar(0.7 + cycle * 2.4);
+                    sm.scale.setScalar(0.75 + cycle * 2.6);
                     sm.material.opacity = Math.max(0, 0.55 * (1 - cycle));
                 });
 
-                // Animate floating glowing magma embers
+                // 7. GLOWING MAGMA EMBERS
                 embers.forEach((em) => {
-                    const curAngle = em.angle + t * em.speed * 0.6;
+                    const curAngle = em.angle + t * em.speed * 0.5;
                     em.mesh.position.set(
                         vx + Math.cos(curAngle) * em.dist,
-                        em.baseY + Math.sin(t * em.speed + em.angle) * 0.6,
+                        em.baseY + Math.sin(t * em.speed + em.angle) * 0.65,
                         vz + Math.sin(curAngle) * em.dist
                     );
                     em.mesh.rotation.y = t * 2.5;
