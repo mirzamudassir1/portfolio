@@ -1,6 +1,20 @@
 const btn = document.getElementById('adminBtn');
-const getToken = () => localStorage.getItem('adminToken');
-const setBtn = () => { btn.textContent = getToken() ? '⚙ Admin' : '🔐 Login'; };
+const getToken = () => {
+    const t = localStorage.getItem('adminToken');
+    if (!t) return null;
+    try {
+        const payload = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        if (payload.exp && payload.exp * 1000 < Date.now()) {
+            localStorage.removeItem('adminToken');
+            return null;
+        }
+    } catch {
+        localStorage.removeItem('adminToken');
+        return null;
+    }
+    return t;
+};
+const setBtn = () => { if (btn) btn.textContent = getToken() ? '⚙ Admin' : '🔐 Login'; };
 setBtn();
 
 const esc = (s = '') =>
@@ -51,27 +65,52 @@ function showLogin(msg = '') {
     box(`
     <h2>Admin login</h2>
     <form id="lf">
-      <input id="lu" placeholder="Username" autocomplete="username">
+      <input id="lu" placeholder="Username (mirzamudassir)" autocomplete="username">
       <input id="lp" type="password" placeholder="Password" autocomplete="current-password" style="margin-top:8px">
-      <button type="submit">Login</button>
-      <div class="st" id="ls">${esc(msg)}</div>
+      <button type="submit" id="lSub" style="margin-top:12px;width:100%;padding:9px;font-size:14px;">Login</button>
+      <div class="st" id="ls" style="min-height:20px;margin-top:10px;">${esc(msg)}</div>
     </form>`);
-    modal.querySelector('#lf').onsubmit = async (e) => {
+
+    const form = modal.querySelector('#lf');
+    const submitBtn = modal.querySelector('#lSub');
+    const st = modal.querySelector('#ls');
+    setTimeout(() => modal.querySelector('#lu')?.focus(), 0);
+
+    form.onsubmit = async (e) => {
         e.preventDefault();
-        const st = modal.querySelector('#ls');
+        const username = v('#lu');
+        const password = modal.querySelector('#lp').value;
+
+        if (!username || !password) {
+            st.textContent = 'Please enter both username and password';
+            return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Logging in...';
+        st.textContent = '';
+
         try {
             const res = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: v('#lu'), password: modal.querySelector('#lp').value }),
+                body: JSON.stringify({ username, password }),
             });
-            const data = await res.json();
-            if (!res.ok) { st.textContent = data.error; return; }
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                st.textContent = data.error || 'Wrong username or password';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Login';
+                return;
+            }
             localStorage.setItem('adminToken', data.token);
             setBtn();
             showEditor();
-        } catch {
-            st.textContent = 'Network error';
+        } catch (err) {
+            console.error('Login error:', err);
+            st.textContent = 'Network error: could not connect to server';
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Login';
         }
     };
 }
@@ -323,7 +362,11 @@ async function showMessages() {
 }
 
 // ---------- Open ----------
-btn.onclick = () => {
+function openAdminModal() {
     modal.style.display = 'flex';
+    const studyHUD = document.getElementById('techStudyHUD');
+    if (studyHUD) studyHUD.style.display = 'none';
     getToken() ? showEditor() : showLogin();
-};
+}
+
+if (btn) btn.addEventListener('click', openAdminModal);

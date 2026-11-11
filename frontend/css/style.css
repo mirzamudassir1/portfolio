@@ -19,13 +19,26 @@ canvas {
     position: fixed;
     top: 12px;
     right: 20px;
-    z-index: 6;
+    z-index: 1000;
     padding: 8px 16px;
     border: none;
     border-radius: 8px;
     background: #ffd166;
-    font-weight: 600;
+    color: #111827;
+    font-weight: 700;
+    font-size: 13px;
     cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+    transition: transform 0.15s, background 0.15s;
+}
+
+#adminBtn:hover {
+    background: #ffc233;
+    transform: translateY(-1px);
+}
+
+#adminBtn:active {
+    transform: translateY(1px);
 }
 
 #panel {
@@ -214,17 +227,17 @@ canvas {
 .project-btn-secondary:hover {
     background: #e2e8f0;
 }
-}
 
 /* ---------- Admin modal ---------- */
 #adminModal {
     position: fixed;
     inset: 0;
-    background: #000a;
+    background: rgba(11, 29, 51, 0.75);
+    backdrop-filter: blur(4px);
     display: none;
     align-items: center;
     justify-content: center;
-    z-index: 20;
+    z-index: 2000;
 }
 
 #adminModal .box {
@@ -324,6 +337,54 @@ canvas {
     white-space: pre-wrap;
 }
 
+#adminModal .pm-container {
+    margin-top: 14px;
+    padding: 12px;
+    border-radius: 10px;
+    background: #0f2744;
+    border: 1px solid rgba(255, 209, 102, 0.2);
+}
+
+#adminModal .pm-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+#adminModal .pm-header h3 {
+    margin: 0;
+    font-size: 14px;
+    color: #ffd166;
+}
+
+#adminModal .pm-add-btn {
+    padding: 5px 10px;
+    font-size: 12px;
+    background: #10b981;
+    color: #fff;
+}
+
+#adminModal .pm-card {
+    position: relative;
+    background: #12304f;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+}
+
+#adminModal .pm-del-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    padding: 3px 8px;
+    font-size: 11px;
+    background: #e74c3c;
+    color: #fff;
+}
+
 
 /* ---------- Tech Study HUD & Modal (Clean Human-Crafted Top Header Theme) ---------- */
 .tech-study-hud {
@@ -391,6 +452,41 @@ canvas {
     letter-spacing: 0.06em;
     color: #64748b;
     text-transform: uppercase;
+}
+
+.tsh-cat-bar {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.tsh-cat-pill {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 9999px;
+    background: #f8fafc;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+    font-family: inherit;
+}
+
+.tsh-cat-pill:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    color: #0f172a;
+}
+
+.tsh-cat-pill.active {
+    background: #0284c7;
+    color: #ffffff;
+    border-color: #0284c7;
+    box-shadow: 0 1px 3px rgba(2, 132, 199, 0.25);
 }
 
 .tsh-nav-bar {

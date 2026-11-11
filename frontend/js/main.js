@@ -1659,6 +1659,8 @@ function handleSpace() {
 }
 
 let activeStudyProp = null;
+let lastNearStudyProp = null;
+let selectedCategoryFilter = 'ALL';
 let hudDismissed = false;
 let lastDismissedPropId = null;
 
@@ -1677,7 +1679,26 @@ document.body.appendChild(studyModal);
 function renderTechStudyHUD(sd) {
     if (!sd) return;
     const allStudyProps = dynamicProps.filter((p) => p.studyData);
-    const navButtonsHtml = allStudyProps.map((p) => {
+
+    // Category tabs definition
+    const categories = ['ALL', 'LANGUAGES', 'LIBRARIES', 'TECH & TOOLS'];
+    const catPillsHtml = categories.map((cat) => {
+        const isActive = selectedCategoryFilter === cat;
+        const count = cat === 'ALL'
+            ? allStudyProps.length
+            : allStudyProps.filter((p) => (p.category || '').toUpperCase() === cat).length;
+        const label = cat === 'ALL' ? 'All' : cat === 'LANGUAGES' ? 'Languages' : cat === 'LIBRARIES' ? 'Libraries' : 'Tech & Tools';
+        return `<button class="tsh-cat-pill ${isActive ? 'active' : ''}" data-cat="${cat}" type="button">
+            ${label} (${count})
+        </button>`;
+    }).join('');
+
+    // Filter study props based on selectedCategoryFilter
+    const visibleProps = selectedCategoryFilter === 'ALL'
+        ? allStudyProps
+        : allStudyProps.filter((p) => (p.category || '').toUpperCase() === selectedCategoryFilter);
+
+    const navButtonsHtml = visibleProps.map((p) => {
         const isActive = activeStudyProp && (activeStudyProp.id === p.id || activeStudyProp.studyData.title === p.studyData.title);
         return `<button class="tsh-nav-btn ${isActive ? 'active' : ''}" data-prop-id="${p.id}" type="button">
             <span>${p.icon || '📦'}</span>
@@ -1690,7 +1711,8 @@ function renderTechStudyHUD(sd) {
         <div class="tsh-header-row">
             <div class="tsh-badge">STUDYING TECH · ${(sd.category || 'TECH').toUpperCase()}</div>
         </div>
-        ${allStudyProps.length > 0 ? `<div class="tsh-nav-bar" id="tshNavBar">${navButtonsHtml}</div>` : ''}
+        <div class="tsh-cat-bar" id="tshCatBar">${catPillsHtml}</div>
+        ${visibleProps.length > 0 ? `<div class="tsh-nav-bar" id="tshNavBar">${navButtonsHtml}</div>` : ''}
         <div class="tsh-title">
             <span class="tsh-icon">${sd.icon || '⚡'}</span>
             <span class="tsh-name">${escHtml(sd.title)}</span>
@@ -1725,6 +1747,31 @@ function renderTechStudyHUD(sd) {
         };
     }
 
+    // Category pills click handlers
+    const catPills = techStudyHUD.querySelectorAll('.tsh-cat-pill');
+    catPills.forEach((pill) => {
+        pill.onclick = (e) => {
+            e.stopPropagation();
+            const cat = pill.getAttribute('data-cat');
+            selectedCategoryFilter = cat;
+            // If current activeStudyProp is not in this category, switch to the first item in the category
+            const matchesCat = selectedCategoryFilter === 'ALL'
+                ? allStudyProps
+                : allStudyProps.filter((p) => (p.category || '').toUpperCase() === selectedCategoryFilter);
+            if (matchesCat.length > 0) {
+                const currentStillMatches = matchesCat.some((p) => activeStudyProp && p.id === activeStudyProp.id);
+                if (!currentStillMatches) {
+                    activeStudyProp = matchesCat[0];
+                }
+            }
+            hudDismissed = false;
+            lastDismissedPropId = null;
+            renderTechStudyHUD(activeStudyProp ? activeStudyProp.studyData : sd);
+            techStudyHUD.style.display = 'block';
+        };
+    });
+
+    // Tech selection buttons click handlers
     const navBtns = techStudyHUD.querySelectorAll('.tsh-nav-btn');
     navBtns.forEach((btn) => {
         btn.onclick = (e) => {
@@ -2196,6 +2243,7 @@ function handlePlayerPropCollision(dt, mx, mz, isMoving) {
             if (prop.studyData) {
                 hudDismissed = false;
                 lastDismissedPropId = null;
+                lastNearStudyProp = prop;
                 activeStudyProp = prop;
                 renderTechStudyHUD(prop.studyData);
                 techStudyHUD.style.display = 'block';
@@ -2717,7 +2765,9 @@ function animate() {
             }
         }
         if (currentNearStudy) {
-            if (activeStudyProp !== currentNearStudy) {
+            // Only auto-switch if Luffy physically walked to a DIFFERENT block
+            if (lastNearStudyProp !== currentNearStudy) {
+                lastNearStudyProp = currentNearStudy;
                 if (lastDismissedPropId !== currentNearStudy.id) {
                     hudDismissed = false;
                 }
@@ -2727,11 +2777,18 @@ function animate() {
             if (!hudDismissed) {
                 techStudyHUD.style.display = 'block';
             }
-        } else if (!activeStudyProp || Math.hypot(manGroup.position.x - activeStudyProp.x, manGroup.position.z - activeStudyProp.z) > 4.2) {
-            activeStudyProp = null;
-            hudDismissed = false;
-            lastDismissedPropId = null;
-            techStudyHUD.style.display = 'none';
+        } else {
+            // Player walked away from all study blocks
+            const playerNearAnyProp = dynamicProps.some(
+                (p) => p.studyData && Math.hypot(manGroup.position.x - p.x, manGroup.position.z - p.z) < 4.5
+            );
+            if (!playerNearAnyProp) {
+                activeStudyProp = null;
+                lastNearStudyProp = null;
+                hudDismissed = false;
+                lastDismissedPropId = null;
+                techStudyHUD.style.display = 'none';
+            }
         }
         setChip(spaceChip, spaceMsg);
         setChip(eChip, eMsg);
