@@ -1022,6 +1022,8 @@ function resetProps() {
         prop.rotX = 0; prop.rotY = 0; prop.rotZ = 0;
         prop.vRotX = 0; prop.vRotY = 0; prop.vRotZ = 0;
         prop.floating = false;
+        prop.knockedOff = false;
+        prop.restingOn = null;
         const groundY = getPropSupportSurface(prop, 0).height;
         prop.grounded = prop.origY <= groundY + prop.h * 0.5 + 0.05;
         prop.mesh.position.set(prop.x, prop.y, prop.z);
@@ -1190,13 +1192,13 @@ const nameLetterSideMat = new THREE.MeshPhongMaterial({
     shininess: 22,
 });
 
-const LETTER_H = 1.05;
-const LETTER_D = 0.30;
-const LETTER_GAP = 0.16;
-const LETTER_WIDTHS = { M: 0.96, I: 0.36, U: 0.80, D: 0.80, A: 0.84, S: 0.78, R: 0.82, Z: 0.80 };
+const LETTER_H = 0.98;
+const LETTER_D = 0.28;
+const LETTER_GAP = 0.14;
+const LETTER_WIDTHS = { M: 0.88, I: 0.32, U: 0.74, D: 0.74, A: 0.76, S: 0.72, R: 0.76, Z: 0.74 };
 
-function createNameLetterBlock({ char, x, z, idx, id }) {
-    const targetW = LETTER_WIDTHS[char] || 0.80;
+function createNameLetterBlock({ char, x, z, idx, id, tier = 0 }) {
+    const targetW = LETTER_WIDTHS[char] || 0.75;
     const shape = createLetterShape(char, targetW, LETTER_H);
     const geo = new THREE.ExtrudeGeometry(shape, {
         depth: LETTER_D,
@@ -1216,7 +1218,7 @@ function createNameLetterBlock({ char, x, z, idx, id }) {
 
     const m = new THREE.Mesh(geo, [nameLetterFrontMat, nameLetterSideMat]);
     const groundY = getPropSurface(x, z, 0).height;
-    const dropY = groundY + h * 0.5 + 2.2 + idx * 0.22;
+    const dropY = groundY + tier * (h + 0.01) + h * 0.5 + 2.2 + idx * 0.18;
     m.position.set(x, dropY, z);
     scene.add(m);
 
@@ -1229,8 +1231,8 @@ function createNameLetterBlock({ char, x, z, idx, id }) {
         w,
         h,
         d,
-        radius: Math.max(0.24, Math.min(targetW, 0.76) * 0.42),
-        flatRadius: Math.max(0.38, Math.max(w, h) * 0.44),
+        radius: Math.max(0.24, Math.min(targetW, 0.74) * 0.42),
+        flatRadius: Math.max(0.36, Math.max(w, h) * 0.44),
         mass: 0.85,
         x, y: dropY, z,
         origX: x, origY: dropY, origZ: z,
@@ -1240,33 +1242,50 @@ function createNameLetterBlock({ char, x, z, idx, id }) {
         grounded: false,
         floating: false,
         restingOn: null,
+        supportBase: null,
+        supportOffsetX: 0,
+        knockedOff: false,
     };
     dynamicProps.push(prop);
     return prop;
 }
 
-/** Place one horizontal row of pushable 3D extruded letters on the Harbor lawn. */
-function placeNameRow(word, centerX, z, startIdx) {
+/** Place one horizontal word of pushable 3D extruded letters on the Harbor lawn. */
+function placeNameWord(word, centerX, z, startIdx, tier = 0, supportRow = null) {
     const chars = word.split('');
-    const totalW = chars.reduce((sum, c) => sum + (LETTER_WIDTHS[c] || 0.80), 0)
+    const totalW = chars.reduce((sum, c) => sum + (LETTER_WIDTHS[c] || 0.75), 0)
         + (chars.length - 1) * LETTER_GAP;
     let cursorX = centerX - totalW / 2;
+    const created = [];
     chars.forEach((ch, i) => {
-        const lw = LETTER_WIDTHS[ch] || 0.80;
+        const lw = LETTER_WIDTHS[ch] || 0.75;
         const lx = cursorX + lw / 2;
         cursorX += lw + LETTER_GAP;
-        createNameLetterBlock({
+        const p = createNameLetterBlock({
             char: ch,
             x: lx,
             z,
             idx: startIdx + i,
+            tier,
             id: `name_${word}_${i}_${ch}`,
         });
+        if (supportRow && supportRow.length) {
+            let best = supportRow[0], bestDist = Infinity;
+            for (const base of supportRow) {
+                const dist = Math.abs(base.x - lx);
+                if (dist < bestDist) { bestDist = dist; best = base; }
+            }
+            p.supportBase = best;
+            p.supportOffsetX = lx - best.x;
+        }
+        created.push(p);
     });
+    return created;
 }
 
-placeNameRow('MIRZA', 0.8, -19.2, 0);
-placeNameRow('MUDASSIR', 1.6, -21.8, 5);
+// Two-tier Harbor monument: MIRZA stacked directly above MUDASSIR
+const mudassirRow = placeNameWord('MUDASSIR', 1.6, -20.4, 0, 0, null);
+placeNameWord('MIRZA', 1.6, -20.4, 8, 1, mudassirRow);
 
 // gangplank (pier -> ship deck), lifts away when the ship leaves
 const plankMat = new THREE.MeshPhongMaterial({ color: 0xc28a52, transparent: true });
@@ -2299,9 +2318,10 @@ function handlePlayerPropCollision(dt, mx, mz, isMoving) {
             const nx = dx / dist;
             const nz = dz / dist;
 
-            // If top box hit directly
+            // If top block hit directly
             if (prop.restingOn) {
                 prop.restingOn = null;
+                prop.knockedOff = true;
                 prop.vx += (nx * 3.8 + (Math.random() - 0.5) * 1.5) / prop.mass;
                 prop.vz += (nz * 3.8 + (Math.random() - 0.5) * 1.5) / prop.mass;
                 prop.vy = 2.2;
@@ -2311,10 +2331,11 @@ function handlePlayerPropCollision(dt, mx, mz, isMoving) {
                 spawnParticles(prop.x, prop.y, prop.z, 6, false);
             }
 
-            // If bottom box hit, knock off the top box!
+            // If bottom block hit, knock off any block resting above it!
             for (const other of dynamicProps) {
                 if (other.restingOn === prop) {
                     other.restingOn = null;
+                    other.knockedOff = true;
                     other.vx = prop.vx * 0.7 + (nx + (Math.random() - 0.5) * 0.8) * 2.5;
                     other.vz = prop.vz * 0.7 + (nz + (Math.random() - 0.5) * 0.8) * 2.5;
                     other.vy = 2.4;
@@ -2399,19 +2420,22 @@ function updateDynamicProps(dt, t) {
     for (const prop of dynamicProps) {
         if (prop.restingOn) {
             const base = prop.restingOn;
-            const distFromBase = Math.hypot(prop.x - base.x, prop.z - base.z);
+            const offX = prop.supportOffsetX || 0;
+            const distFromBase = Math.hypot(prop.x - (base.x + offX), prop.z - base.z);
             const baseSpd = Math.hypot(base.vx, base.vz);
-            if (distFromBase > 0.3 || baseSpd > 1.2) {
+            const baseTilted = Math.abs(base.rotX) > 0.16 || Math.abs(base.rotZ) > 0.16;
+            if (distFromBase > 0.35 || baseSpd > 0.85 || baseTilted || !base.grounded) {
                 prop.restingOn = null;
-                prop.vx = base.vx + (Math.random() - 0.5) * 1.0;
-                prop.vz = base.vz + (Math.random() - 0.5) * 1.0;
-                prop.vy = 1.5;
-                prop.vRotX = (Math.random() - 0.5) * 5;
-                prop.vRotZ = (Math.random() - 0.5) * 5;
+                prop.knockedOff = true;
+                prop.vx = base.vx + (Math.random() - 0.5) * 1.2;
+                prop.vz = base.vz + (Math.random() - 0.5) * 1.2;
+                prop.vy = 1.4;
+                prop.vRotX = base.vRotX * 0.6 + (Math.random() - 0.5) * 5;
+                prop.vRotZ = base.vRotZ * 0.6 + (Math.random() - 0.5) * 5;
             } else {
-                prop.x = base.x;
+                prop.x = base.x + offX;
                 prop.z = base.z;
-                prop.y = base.y + base.h / 2 + prop.h / 2;
+                prop.y = base.y + getPropHalfHeight(base) + getPropHalfHeight(prop) + 0.006;
                 prop.rotY = base.rotY;
                 prop.rotX = base.rotX;
                 prop.rotZ = base.rotZ;
@@ -2481,6 +2505,22 @@ function updateDynamicProps(dt, t) {
                 prop.rotZ += prop.vRotZ * dt;
 
                 const postFallHalfH = getPropHalfHeight(prop);
+                const base = prop.supportBase;
+                const stackY = base && !prop.knockedOff && base.grounded && Math.abs(base.rotX) < 0.16 && Math.abs(base.rotZ) < 0.16
+                    ? base.y + getPropHalfHeight(base) + postFallHalfH + 0.006
+                    : null;
+
+                if (stackY !== null && prop.y <= stackY + 0.02) {
+                    prop.y = stackY;
+                    prop.vy = 0;
+                    prop.vx = 0;
+                    prop.vz = 0;
+                    prop.grounded = true;
+                    prop.restingOn = base;
+                    spawnParticles(prop.x, base.y + getPropHalfHeight(base), prop.z, 4, false);
+                    continue;
+                }
+
                 const hardGroundY = surf.height + postFallHalfH;
                 if (prop.y <= hardGroundY) {
                     prop.y = hardGroundY;
@@ -2632,7 +2672,7 @@ function updateDynamicProps(dt, t) {
         if (!prop.restingOn) {
             const hardSurf = getPropSupportSurface(prop, t);
             if (!hardSurf.isWater) {
-                const hardMinY = hardSurf.height + getPropHalfHeight(prop);
+                const hardMinY = hardSurf.height + getPropHalfHeight(prop) + 0.008;
                 if (prop.y < hardMinY) {
                     prop.y = hardMinY;
                     if (prop.vy < 0) prop.vy = 0;
