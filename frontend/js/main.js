@@ -972,11 +972,45 @@ function getPropSurface(x, z, time) {
     return { height: waveY, isWater: true };
 }
 
-/** Return effective vertical half-height of a prop given its current tilt. */
+const _halfHEuler = new THREE.Euler(0, 0, 0, 'XYZ');
+const _halfHMat = new THREE.Matrix4();
+const _bboxSize = new THREE.Vector3();
+
+/** Return exact world-space vertical half-extent of a prop at its current orientation. */
 function getPropHalfHeight(prop) {
-    if (!prop.isNameLetter) return prop.h / 2;
-    const upright = Math.abs(Math.cos(prop.rotX) * Math.cos(prop.rotZ));
-    return upright * (prop.h / 2) + (1 - upright) * (prop.d / 2);
+    if (!prop.isNameLetter && prop.rotX === 0 && prop.rotZ === 0) return prop.h * 0.5;
+    if (prop.type === 'cylinder') {
+        const up = Math.abs(Math.cos(prop.rotX) * Math.cos(prop.rotZ));
+        return up * (prop.h * 0.5) + (1 - up) * (prop.w * 0.5);
+    }
+    _halfHEuler.set(prop.rotX, prop.rotY, prop.rotZ, 'XYZ');
+    _halfHMat.makeRotationFromEuler(_halfHEuler);
+    const e = _halfHMat.elements;
+    return Math.abs(e[1]) * (prop.w * 0.5)
+        + Math.abs(e[5]) * (prop.h * 0.5)
+        + Math.abs(e[9]) * (prop.d * 0.5);
+}
+
+/** Return effective horizontal collision radius, expanding cleanly when tall letters lie flat. */
+function getPropRadius(prop) {
+    if (!prop.isNameLetter) return prop.radius;
+    const flatFactor = 1 - Math.abs(Math.cos(prop.rotX) * Math.cos(prop.rotZ));
+    if (flatFactor < 0.35) return prop.radius;
+    return prop.radius + (prop.flatRadius - prop.radius) * Math.min(1, flatFactor);
+}
+
+/** Return hard support ground height across a prop's footprint (or wave height over water). */
+function getPropSupportSurface(prop, time) {
+    const center = getPropSurface(prop.x, prop.z, time);
+    if (center.isWater) return center;
+    const r = getPropRadius(prop) * 0.85;
+    let maxH = center.height;
+    const offsets = [[r, 0], [-r, 0], [0, r], [0, -r]];
+    for (const [ox, oz] of offsets) {
+        const s = getPropSurface(prop.x + ox, prop.z + oz, time);
+        if (!s.isWater && s.height > maxH) maxH = s.height;
+    }
+    return { height: maxH, isWater: false };
 }
 
 function resetProps() {
@@ -988,8 +1022,8 @@ function resetProps() {
         prop.rotX = 0; prop.rotY = 0; prop.rotZ = 0;
         prop.vRotX = 0; prop.vRotY = 0; prop.vRotZ = 0;
         prop.floating = false;
-        const groundY = getPropSurface(prop.origX, prop.origZ, 0).height;
-        prop.grounded = prop.origY <= groundY + prop.h / 2 + 0.05;
+        const groundY = getPropSupportSurface(prop, 0).height;
+        prop.grounded = prop.origY <= groundY + prop.h * 0.5 + 0.05;
         prop.mesh.position.set(prop.x, prop.y, prop.z);
         prop.mesh.rotation.set(0, 0, 0);
     }
@@ -1101,6 +1135,18 @@ function createLetterShape(char, w, h) {
         line(shape, 0.46, 0.5);
         line(shape, -0.46, 0.5);
         shape.closePath();
+    } else if (ch === 'Z') {
+        move(shape, -0.46, 0.50);
+        line(shape, -0.46, 0.28);
+        line(shape, 0.10, 0.28);
+        line(shape, -0.46, -0.32);
+        line(shape, -0.46, -0.50);
+        line(shape, 0.46, -0.50);
+        line(shape, 0.46, -0.28);
+        line(shape, -0.10, -0.28);
+        line(shape, 0.46, 0.32);
+        line(shape, 0.46, 0.50);
+        shape.closePath();
     } else if (ch === 'R') {
         move(shape, -0.44, 0.5);
         line(shape, -0.44, -0.5);
@@ -1133,25 +1179,25 @@ function createLetterShape(char, w, h) {
 
 const nameLetterFrontMat = new THREE.MeshPhongMaterial({
     color: 0xffffff,
-    emissive: 0x1a1d28,
-    specular: 0x2c3040,
-    shininess: 30,
+    emissive: 0x565860,
+    specular: 0x353848,
+    shininess: 35,
 });
 const nameLetterSideMat = new THREE.MeshPhongMaterial({
-    color: 0xe3e7f5,
-    emissive: 0x101322,
-    specular: 0x222638,
+    color: 0xdbe0f4,
+    emissive: 0x1e2336,
+    specular: 0x262a3e,
     shininess: 22,
 });
 
-const LETTER_H = 1.15;
-const LETTER_D = 0.32;
-const LETTER_GAP = 0.18;
-const LETTER_WIDTHS = { M: 1.04, I: 0.38, U: 0.86, D: 0.86, A: 0.90, S: 0.82, R: 0.88 };
+const LETTER_H = 1.05;
+const LETTER_D = 0.30;
+const LETTER_GAP = 0.16;
+const LETTER_WIDTHS = { M: 0.96, I: 0.36, U: 0.80, D: 0.80, A: 0.84, S: 0.78, R: 0.82, Z: 0.80 };
 
 function createNameLetterBlock({ char, x, z, idx, id }) {
-    const w = LETTER_WIDTHS[char] || 0.84;
-    const shape = createLetterShape(char, w, LETTER_H);
+    const targetW = LETTER_WIDTHS[char] || 0.80;
+    const shape = createLetterShape(char, targetW, LETTER_H);
     const geo = new THREE.ExtrudeGeometry(shape, {
         depth: LETTER_D,
         bevelEnabled: true,
@@ -1161,10 +1207,16 @@ function createNameLetterBlock({ char, x, z, idx, id }) {
         curveSegments: 10,
     });
     geo.center();
+    geo.computeBoundingBox();
+    geo.boundingBox.getSize(_bboxSize);
+
+    const w = _bboxSize.x;
+    const h = _bboxSize.y;
+    const d = _bboxSize.z;
 
     const m = new THREE.Mesh(geo, [nameLetterFrontMat, nameLetterSideMat]);
     const groundY = getPropSurface(x, z, 0).height;
-    const dropY = groundY + LETTER_H / 2 + 2.4 + idx * 0.32;
+    const dropY = groundY + h * 0.5 + 2.2 + idx * 0.22;
     m.position.set(x, dropY, z);
     scene.add(m);
 
@@ -1175,9 +1227,10 @@ function createNameLetterBlock({ char, x, z, idx, id }) {
         char,
         mesh: m,
         w,
-        h: LETTER_H,
-        d: LETTER_D + 0.07,
-        radius: Math.max(0.28, w * 0.44),
+        h,
+        d,
+        radius: Math.max(0.24, Math.min(targetW, 0.76) * 0.42),
+        flatRadius: Math.max(0.38, Math.max(w, h) * 0.44),
         mass: 0.85,
         x, y: dropY, z,
         origX: x, origY: dropY, origZ: z,
@@ -1192,23 +1245,28 @@ function createNameLetterBlock({ char, x, z, idx, id }) {
     return prop;
 }
 
-const NAME_CHARS = ['M', 'U', 'D', 'A', 'S', 'S', 'I', 'R'];
-const totalNameW = NAME_CHARS.reduce((sum, c) => sum + (LETTER_WIDTHS[c] || 0.84), 0)
-    + (NAME_CHARS.length - 1) * LETTER_GAP;
-const nameCenter = { x: 1.6, z: -20.5 };
-let cursorX = nameCenter.x - totalNameW / 2;
-NAME_CHARS.forEach((ch, idx) => {
-    const lw = LETTER_WIDTHS[ch] || 0.84;
-    const lx = cursorX + lw / 2;
-    cursorX += lw + LETTER_GAP;
-    createNameLetterBlock({
-        char: ch,
-        x: lx,
-        z: nameCenter.z,
-        idx,
-        id: `name_letter_${idx}_${ch}`,
+/** Place one horizontal row of pushable 3D extruded letters on the Harbor lawn. */
+function placeNameRow(word, centerX, z, startIdx) {
+    const chars = word.split('');
+    const totalW = chars.reduce((sum, c) => sum + (LETTER_WIDTHS[c] || 0.80), 0)
+        + (chars.length - 1) * LETTER_GAP;
+    let cursorX = centerX - totalW / 2;
+    chars.forEach((ch, i) => {
+        const lw = LETTER_WIDTHS[ch] || 0.80;
+        const lx = cursorX + lw / 2;
+        cursorX += lw + LETTER_GAP;
+        createNameLetterBlock({
+            char: ch,
+            x: lx,
+            z,
+            idx: startIdx + i,
+            id: `name_${word}_${i}_${ch}`,
+        });
     });
-});
+}
+
+placeNameRow('MIRZA', 0.8, -19.2, 0);
+placeNameRow('MUDASSIR', 1.6, -21.8, 5);
 
 // gangplank (pier -> ship deck), lifts away when the ship leaves
 const plankMat = new THREE.MeshPhongMaterial({ color: 0xc28a52, transparent: true });
@@ -2234,7 +2292,7 @@ function handlePlayerPropCollision(dt, mx, mz, isMoving) {
         const dx = prop.x - p.x;
         const dz = prop.z - p.z;
         const dist = Math.hypot(dx, dz);
-        const minDist = PLAYER_R + prop.radius;
+        const minDist = PLAYER_R + getPropRadius(prop);
 
         if (dist < minDist && dist > 0.0001) {
             const pen = minDist - dist;
@@ -2370,7 +2428,7 @@ function updateDynamicProps(dt, t) {
         prop.x += prop.vx * dt;
         prop.z += prop.vz * dt;
 
-        const surf = getPropSurface(prop.x, prop.z, t);
+        const surf = getPropSupportSurface(prop, t);
         const halfH = getPropHalfHeight(prop);
 
         if (surf.isWater) {
@@ -2408,7 +2466,7 @@ function updateDynamicProps(dt, t) {
                 prop.rotZ += (Math.cos(t * 2.2 + prop.z * 2) * 0.15 - prop.rotZ) * Math.min(1, 5 * dt);
             }
         } else {
-            // On solid ground (pier deck or shore)
+            // On solid ground (pier deck, Harbor green terrace, or shore)
             prop.floating = false;
             const targetGroundY = surf.height + halfH;
 
@@ -2422,11 +2480,13 @@ function updateDynamicProps(dt, t) {
                 prop.rotY += prop.vRotY * dt;
                 prop.rotZ += prop.vRotZ * dt;
 
-                if (prop.y <= targetGroundY) {
-                    prop.y = targetGroundY;
+                const postFallHalfH = getPropHalfHeight(prop);
+                const hardGroundY = surf.height + postFallHalfH;
+                if (prop.y <= hardGroundY) {
+                    prop.y = hardGroundY;
                     if (prop.vy < -2.0) {
                         prop.vy = -prop.vy * 0.25;
-                        spawnParticles(prop.x, targetGroundY - halfH * 0.8, prop.z, 5, false);
+                        spawnParticles(prop.x, hardGroundY - postFallHalfH * 0.8, prop.z, 5, false);
                     } else {
                         prop.vy = 0;
                         prop.grounded = true;
@@ -2461,6 +2521,10 @@ function updateDynamicProps(dt, t) {
                     prop.rotX += (0 - prop.rotX) * Math.min(1, 10 * dt);
                     prop.rotZ += (0 - prop.rotZ) * Math.min(1, 10 * dt);
                 }
+
+                // Re-enforce hard floor immediately after rotation so tilting never dips into ground
+                const minGroundY = surf.height + getPropHalfHeight(prop);
+                if (prop.y < minGroundY) prop.y = minGroundY;
             }
         }
 
@@ -2469,81 +2533,64 @@ function updateDynamicProps(dt, t) {
         }
     }
 
-    // 3. Prop vs Prop collision
-    for (let i = 0; i < dynamicProps.length; i++) {
-        for (let j = i + 1; j < dynamicProps.length; j++) {
-            const a = dynamicProps[i], b = dynamicProps[j];
-            if (a.restingOn === b || b.restingOn === a) continue;
+    // 3 & 4. Prop vs Prop & Static Obstacles (2 passes for solid non-overlapping separation)
+    for (let pass = 0; pass < 2; pass++) {
+        for (let i = 0; i < dynamicProps.length; i++) {
+            for (let j = i + 1; j < dynamicProps.length; j++) {
+                const a = dynamicProps[i], b = dynamicProps[j];
+                if (a.restingOn === b || b.restingOn === a) continue;
 
-            const aHalfH = getPropHalfHeight(a), bHalfH = getPropHalfHeight(b);
-            const aBot = a.y - aHalfH, aTop = a.y + aHalfH;
-            const bBot = b.y - bHalfH, bTop = b.y + bHalfH;
-            if (aBot > bTop || aTop < bBot) continue;
+                const aHalfH = getPropHalfHeight(a), bHalfH = getPropHalfHeight(b);
+                const aBot = a.y - aHalfH, aTop = a.y + aHalfH;
+                const bBot = b.y - bHalfH, bTop = b.y + bHalfH;
+                if (aBot > bTop || aTop < bBot) continue;
 
-            const dx = b.x - a.x, dz = b.z - a.z;
-            const dist = Math.hypot(dx, dz);
-            const minDist = a.radius + b.radius;
-            if (dist < minDist && dist > 0.0001) {
-                const pen = minDist - dist;
-                const nx = dx / dist, nz = dz / dist;
-                const totalMass = a.mass + b.mass;
-                const aShare = b.mass / totalMass;
-                const bShare = a.mass / totalMass;
+                const dx = b.x - a.x, dz = b.z - a.z;
+                const dist = Math.hypot(dx, dz);
+                const minDist = getPropRadius(a) + getPropRadius(b);
+                if (dist < minDist && dist > 0.0001) {
+                    const pen = minDist - dist;
+                    const nx = dx / dist, nz = dz / dist;
+                    const totalMass = a.mass + b.mass;
+                    const aShare = b.mass / totalMass;
+                    const bShare = a.mass / totalMass;
 
-                a.x -= nx * pen * aShare;
-                a.z -= nz * pen * aShare;
-                b.x += nx * pen * bShare;
-                b.z += nz * pen * bShare;
+                    a.x -= nx * pen * aShare;
+                    a.z -= nz * pen * aShare;
+                    b.x += nx * pen * bShare;
+                    b.z += nz * pen * bShare;
 
-                const relV = (a.vx - b.vx) * nx + (a.vz - b.vz) * nz;
-                if (relV > 0) {
-                    const imp = relV * 0.78;
-                    a.vx -= imp * nx * aShare;
-                    a.vz -= imp * nz * aShare;
-                    b.vx += imp * nx * bShare;
-                    b.vz += imp * nz * bShare;
-                    a.vRotY += (Math.random() - 0.5) * 1.5;
-                    b.vRotY += (Math.random() - 0.5) * 1.5;
-                    if (b.isNameLetter && relV > 0.25) {
-                        b.vRotX += nz * relV * 2.2;
-                        b.vRotZ -= nx * relV * 2.2;
-                    }
-                    if (a.isNameLetter && relV > 0.25) {
-                        a.vRotX -= nz * relV * 1.8;
-                        a.vRotZ += nx * relV * 1.8;
+                    if (pass === 0) {
+                        const relV = (a.vx - b.vx) * nx + (a.vz - b.vz) * nz;
+                        if (relV > 0) {
+                            const imp = relV * 0.78;
+                            a.vx -= imp * nx * aShare;
+                            a.vz -= imp * nz * aShare;
+                            b.vx += imp * nx * bShare;
+                            b.vz += imp * nz * bShare;
+                            a.vRotY += (Math.random() - 0.5) * 1.5;
+                            b.vRotY += (Math.random() - 0.5) * 1.5;
+                            if (b.isNameLetter && relV > 0.25) {
+                                b.vRotX += nz * relV * 2.2;
+                                b.vRotZ -= nx * relV * 2.2;
+                            }
+                            if (a.isNameLetter && relV > 0.25) {
+                                a.vRotX -= nz * relV * 1.8;
+                                a.vRotZ += nx * relV * 1.8;
+                            }
+                        }
                     }
                 }
             }
         }
-    }
 
-    // 4. Prop vs Static Obstacles
-    for (const prop of dynamicProps) {
-        if (prop.restingOn) continue;
-        for (const s of SOLIDS) {
-            const dx = prop.x - s.x, dz = prop.z - s.z;
-            const dist = Math.hypot(dx, dz);
-            const minDist = prop.radius + s.r;
-            if (dist < minDist && dist > 0.0001) {
-                const pen = minDist - dist;
-                const nx = dx / dist, nz = dz / dist;
-                prop.x += nx * pen;
-                prop.z += nz * pen;
-                const dot = prop.vx * nx + prop.vz * nz;
-                if (dot < 0) {
-                    prop.vx -= 1.3 * dot * nx;
-                    prop.vz -= 1.3 * dot * nz;
-                }
-            }
-        }
-        for (const d of islands) {
-            if (Math.hypot(prop.x - d.x, prop.z - d.z) > d.radius + 2) continue;
-            for (const s of d._solids || []) {
-                if (s.h) continue; // Walkable platform
-                const sx = d.x + s.x, sz = d.z + s.z;
+        for (const prop of dynamicProps) {
+            if (prop.restingOn) continue;
+            const pRad = getPropRadius(prop);
+            const pushCircle = (sx, sz, sr) => {
                 const dx = prop.x - sx, dz = prop.z - sz;
                 const dist = Math.hypot(dx, dz);
-                const minDist = prop.radius + s.r;
+                const minDist = pRad + sr;
                 if (dist < minDist && dist > 0.0001) {
                     const pen = minDist - dist;
                     const nx = dx / dist, nz = dz / dist;
@@ -2555,17 +2602,44 @@ function updateDynamicProps(dt, t) {
                         prop.vz -= 1.3 * dot * nz;
                     }
                 }
+            };
+
+            for (const s of SOLIDS) pushCircle(s.x, s.z, s.r);
+            for (const d of islands) {
+                if (Math.hypot(prop.x - d.x, prop.z - d.z) > d.radius + 2) continue;
+                for (const s of d._solids || []) {
+                    if (!s.h) pushCircle(d.x + s.x, d.z + s.z, s.r);
+                }
             }
-        }
-        if (prop.x > -8.2 - prop.radius && prop.x < -3.8 + prop.radius &&
-            prop.z > -25.7 - prop.radius && prop.z < -22.3 + prop.radius) {
-            prop.z = -22.3 + prop.radius;
-            prop.vz = Math.max(0, prop.vz);
+
+            // 4-sided push-out against Harbor house (box at x: -8..-4, z: -25.5..-22.5)
+            const hx0 = -8.1 - pRad, hx1 = -3.9 + pRad;
+            const hz0 = -25.6 - pRad, hz1 = -22.4 + pRad;
+            if (prop.x > hx0 && prop.x < hx1 && prop.z > hz0 && prop.z < hz1) {
+                const dl = prop.x - hx0, dr = hx1 - prop.x;
+                const df = prop.z - hz0, db = hz1 - prop.z;
+                const m = Math.min(dl, dr, df, db);
+                if (m === dl) { prop.x = hx0; prop.vx = Math.min(0, prop.vx); }
+                else if (m === dr) { prop.x = hx1; prop.vx = Math.max(0, prop.vx); }
+                else if (m === df) { prop.z = hz0; prop.vz = Math.min(0, prop.vz); }
+                else { prop.z = hz1; prop.vz = Math.max(0, prop.vz); }
+            }
         }
     }
 
-    // 5. Update Meshes
+    // 5. Hard Ground Clamp + Update Meshes
     for (const prop of dynamicProps) {
+        if (!prop.restingOn) {
+            const hardSurf = getPropSupportSurface(prop, t);
+            if (!hardSurf.isWater) {
+                const hardMinY = hardSurf.height + getPropHalfHeight(prop);
+                if (prop.y < hardMinY) {
+                    prop.y = hardMinY;
+                    if (prop.vy < 0) prop.vy = 0;
+                    prop.grounded = true;
+                }
+            }
+        }
         prop.mesh.position.set(prop.x, prop.y, prop.z);
         prop.mesh.rotation.set(prop.rotX, prop.rotY, prop.rotZ);
     }
